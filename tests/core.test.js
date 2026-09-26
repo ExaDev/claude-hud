@@ -2323,7 +2323,7 @@ test('countConfigs returns outputStyle with project local precedence', async () 
   }
 });
 
-test('countConfigs uses CLAUDE_CONFIG_DIR and matching .json sidecar for user scope', async () => {
+test('countConfigs uses CLAUDE_CONFIG_DIR and its in-dir .claude.json for user scope', async () => {
   const homeDir = await mkdtemp(path.join(tmpdir(), 'claude-hud-home-'));
   const customConfigDir = path.join(homeDir, '.claude-2');
   const originalHome = process.env.HOME;
@@ -2343,7 +2343,7 @@ test('countConfigs uses CLAUDE_CONFIG_DIR and matching .json sidecar for user sc
     );
     await writeFile(path.join(homeDir, '.claude.json'), JSON.stringify({ disabledMcpServers: ['defaultA'] }), 'utf8');
 
-    // Custom config directory and sidecar should drive user-scope counts.
+    // Custom config directory and its in-dir .claude.json should drive user-scope counts.
     await mkdir(customConfigDir, { recursive: true });
     await writeFile(path.join(customConfigDir, 'CLAUDE.md'), 'custom-global', 'utf8');
     await writeFile(
@@ -2355,7 +2355,7 @@ test('countConfigs uses CLAUDE_CONFIG_DIR and matching .json sidecar for user sc
       'utf8'
     );
     await writeFile(
-      `${customConfigDir}.json`,
+      path.join(customConfigDir, '.claude.json'),
       JSON.stringify({ disabledMcpServers: ['customA'] }),
       'utf8'
     );
