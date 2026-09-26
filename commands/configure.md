@@ -334,6 +334,7 @@ If user chooses "Remove", set `display.customLine` to `""` in config.
 | Usage reset label | `display.showResetLabel` |
 | Model-scoped usage | `display.showModelScopedUsage` (per-model weekly windows, e.g. Fable) |
 | Session name | `display.showSessionName` |
+| Headroom savings | `display.showHeadroom` (requires `HEADROOM_PROXY_URL`; shows tokens, percent, and USD saved for the session, or `headroom: down`) |
 | Auth method | `display.showAuth` (plan label, e.g. "Claude Max 20x", own segment at end of first line) |
 | Auth user | `display.showAuthUser` (login account, truncated to `display.authUserLength` chars, 0 = full) |
 | Session duration | `display.showDuration` |

@@ -9,6 +9,7 @@ import { parseExtraCmdArg, runExtraCmd } from "./extra-cmd.js";
 import { getClaudeCodeVersion } from "./version.js";
 import { getMemoryUsage } from "./memory.js";
 import { readAuthInfo } from "./auth.js";
+import { fetchHeadroomStats, getHeadroomProxyUrl } from "./headroom.js";
 import { resolveEffortLevel } from "./effort.js";
 import { applyContextWindowFallback } from "./context-cache.js";
 import { getUsageFromExternalSnapshot, writeExternalUsageSnapshot } from "./external-usage.js";
@@ -37,6 +38,7 @@ export type MainDeps = {
   getClaudeCodeVersion: typeof getClaudeCodeVersion;
   getMemoryUsage: typeof getMemoryUsage;
   readAuthInfo: typeof readAuthInfo;
+  fetchHeadroomStats: typeof fetchHeadroomStats;
   applyContextWindowFallback: typeof applyContextWindowFallback;
   render: typeof render;
   now: () => number;
@@ -101,6 +103,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
     getClaudeCodeVersion,
     getMemoryUsage,
     readAuthInfo,
+    fetchHeadroomStats,
     applyContextWindowFallback,
     render,
     now: () => Date.now(),
@@ -199,6 +202,10 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       config.display.showAuth || config.display.showAuthUser
         ? deps.readAuthInfo()
         : null;
+    const headroomInfo =
+      config.display.showHeadroom && getHeadroomProxyUrl()
+        ? await deps.fetchHeadroomStats(stdin)
+        : null;
 
     const ctx: RenderContext = {
       stdin,
@@ -218,6 +225,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       effortLevel: effortInfo?.level,
       effortSymbol: effortInfo?.symbol,
       authInfo,
+      headroomInfo,
     };
 
     deps.render(ctx);

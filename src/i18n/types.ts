@@ -15,10 +15,12 @@ export type MessageKey =
   | "label.lastReply"
   | "label.advisor"
   | "label.compactions"
+  | "label.headroom"
   // Status
   | "status.limitReached"
   | "status.allTodosComplete"
   | "status.expired"
+  | "status.headroomDown"
   // Format
   | "format.resets"
   | "format.resetsIn"
@@ -26,6 +28,7 @@ export type MessageKey =
   | "format.untilTime"
   | "format.in"
   | "format.cache"
+  | "format.saved"
   | "format.out"
   | "format.tok"
   | "format.tokPerSec"

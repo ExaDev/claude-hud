@@ -1,6 +1,7 @@
 import type { HudConfig } from './config.js';
 import type { GitStatus } from './git.js';
 import type { AuthInfo } from './auth.js';
+import type { HeadroomInfo } from './headroom.js';
 
 export interface StdinData {
   session_id?: string;
@@ -214,7 +215,8 @@ export interface RenderContext {
   claudeCodeVersion?: string;
   effortLevel?: string;
   effortSymbol?: string;
-  // Auth method + account for the current login (see auth.ts). Only populated
-  // when display.showAuth or display.showAuthUser is enabled.
+  // Auth method + account for the current login (see auth.ts). Only populated when display.showAuth or display.showAuthUser is enabled.
   authInfo?: AuthInfo | null;
+  // Headroom proxy savings for the session (see headroom.ts). Only populated when display.showHeadroom is on and HEADROOM_PROXY_URL is set.
+  headroomInfo?: HeadroomInfo | null;
 }

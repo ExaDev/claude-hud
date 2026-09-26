@@ -17,11 +17,13 @@ export const zhHans: Messages = {
   "label.lastReply": "上次回复",
   "label.advisor": "顾问",
   "label.compactions": "压缩次数",
+  "label.headroom": "headroom",
 
   // Status
   "status.limitReached": "已达上限",
   "status.allTodosComplete": "全部完成",
   "status.expired": "已过期",
+  "status.headroomDown": "不可用",
 
   // Format
   "format.resets": "重置于",
@@ -30,6 +32,7 @@ export const zhHans: Messages = {
   "format.untilTime": "至 {time}",
   "format.in": "输入",
   "format.cache": "缓存",
+  "format.saved": "已节省",
   "format.out": "输出",
   "format.tok": "词元",
   "format.tokPerSec": "tok/s",

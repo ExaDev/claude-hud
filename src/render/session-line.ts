@@ -13,6 +13,7 @@ import type { TimeFormatMode, UsageValueMode } from '../config.js';
 import { formatResetTime, type WallClockOptions } from './format-reset-time.js';
 import { formatTokens, formatContextValue } from '../utils/format.js';
 import { formatAuthSegment } from '../auth.js';
+import { formatHeadroomLabel } from '../headroom.js';
 import { createDebug } from '../debug.js';
 import { formatModelDisplay } from './model-display.js';
 import { formatSessionTokenSummary } from './lines/session-tokens.js';
@@ -145,6 +146,13 @@ export function renderSessionLine(ctx: RenderContext): string {
   // Session name (custom title from /rename, or auto-generated slug)
   if (display?.showSessionName && ctx.transcript.sessionName) {
     push(label(ctx.transcript.sessionName, colors), 'sessionName');
+  }
+
+  if (display?.showHeadroom) {
+    const headroomLabel = ctx.headroomInfo ? formatHeadroomLabel(ctx.headroomInfo) : null;
+    if (headroomLabel) {
+      push(label(headroomLabel, colors), 'headroom');
+    }
   }
 
   if (display?.showClaudeCodeVersion && ctx.claudeCodeVersion) {

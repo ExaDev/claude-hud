@@ -800,6 +800,59 @@ test("main skips auth file I/O when auth segments are disabled", async () => {
   assert.equal(renderedContext?.authInfo, null);
 });
 
+test("main reads headroom stats only when the segment is enabled and the proxy is configured", async () => {
+  let renderedContext;
+  let lookupCalls = 0;
+  const headroomInfo = {
+    stats: { tokensSaved: 456789, savingsPercent: 58.8, savingsUsd: 1.25 },
+    down: false,
+  };
+  const run = async (display, envUrl) => {
+    const savedUrl = process.env.HEADROOM_PROXY_URL;
+    if (envUrl === undefined) {
+      delete process.env.HEADROOM_PROXY_URL;
+    } else {
+      process.env.HEADROOM_PROXY_URL = envUrl;
+    }
+    try {
+      await main({
+        readStdin: async () => makeStdin(),
+        parseTranscript: async () => makeTranscript(),
+        countConfigs: async () => makeCounts(),
+        loadConfig: async () => makeConfig({ display }),
+        getGitStatus: async () => null,
+        fetchHeadroomStats: async () => {
+          lookupCalls += 1;
+          return headroomInfo;
+        },
+        render: (ctx) => {
+          renderedContext = ctx;
+        },
+      });
+    } finally {
+      if (savedUrl === undefined) {
+        delete process.env.HEADROOM_PROXY_URL;
+      } else {
+        process.env.HEADROOM_PROXY_URL = savedUrl;
+      }
+    }
+  };
+
+  await run({ showHeadroom: true }, "http://127.0.0.1:8080");
+  assert.equal(lookupCalls, 1);
+  assert.deepEqual(renderedContext?.headroomInfo, headroomInfo);
+
+  // Disabled flag: no lookup even with the proxy URL set.
+  await run({ showHeadroom: false }, "http://127.0.0.1:8080");
+  assert.equal(lookupCalls, 1);
+  assert.equal(renderedContext?.headroomInfo, null);
+
+  // No proxy URL: no lookup even with the flag on.
+  await run({ showHeadroom: true }, undefined);
+  assert.equal(lookupCalls, 1);
+  assert.equal(renderedContext?.headroomInfo, null);
+});
+
 test("main merges scoped windows from the external snapshot when stdin lacks them", async () => {
   let renderedContext;
   const scopedWindows = [{ label: "Fable", percent: 89, resetAt: new Date("2026-04-27T12:00:00.000Z") }];

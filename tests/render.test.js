@@ -1729,6 +1729,42 @@ test('renderProjectLine shows the enabled auth segment in expanded layout', () =
   assert.ok(line.includes('API Key'));
 });
 
+test('renderSessionLine shows the headroom label when showHeadroom is on', () => {
+  const ctx = baseContext();
+  ctx.config.display.showHeadroom = true;
+  ctx.headroomInfo = {
+    stats: { tokensSaved: 456789, savingsPercent: 58.8, savingsUsd: 1.25 },
+    down: false,
+  };
+
+  const line = stripAnsi(renderSessionLine(ctx));
+  assert.ok(line.includes('headroom 457k saved · 59% · $1.25'), `expected headroom label, got: ${line}`);
+});
+
+test('renderProjectLine shows the headroom down label in expanded layout', () => {
+  const ctx = baseContext();
+  ctx.config.lineLayout = 'expanded';
+  ctx.config.display.showHeadroom = true;
+  ctx.headroomInfo = {
+    stats: { tokensSaved: null, savingsPercent: null, savingsUsd: null },
+    down: true,
+  };
+
+  const line = stripAnsi(renderProjectLine(ctx) ?? '');
+  assert.ok(line.includes('headroom: down'), `expected down label, got: ${line}`);
+});
+
+test('renderSessionLine keeps the headroom label hidden by default', () => {
+  const ctx = baseContext();
+  ctx.headroomInfo = {
+    stats: { tokensSaved: 456789, savingsPercent: 58.8, savingsUsd: 1.25 },
+    down: false,
+  };
+
+  const line = stripAnsi(renderSessionLine(ctx));
+  assert.ok(!line.includes('headroom'), 'headroom must remain opt-in');
+});
+
 test('renderToolsLine renders running and completed tools', () => {
   const ctx = baseContext();
   ctx.transcript.tools = [

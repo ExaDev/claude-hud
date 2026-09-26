@@ -6,6 +6,7 @@ All notable changes to Claude HUD will be documented in this file.
 
 ### Added
 - `display.showDailyCost` option to show today's cumulative spend across sessions (`Today $12.34`), accumulated from the native stdin `cost.total_cost_usd` into a per-day ledger that resets at local midnight (#695).
+- `display.showHeadroom` option to show the headroom proxy's per-session savings (`headroom 457k saved · 59% · $1.25`), read from `HEADROOM_PROXY_URL`, cached per session, with a visible `headroom: down` label when the proxy is unreachable.
 
 ### Fixed
 - Refresh the prompt-cache clock when a request starts rather than when its response arrives, ignoring client-side slash command records, interrupt markers, and subagent requests (#719).

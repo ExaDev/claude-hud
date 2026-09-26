@@ -129,6 +129,18 @@ test('mergeConfig preserves explicit showSessionName=true', () => {
   assert.equal(config.display.showSessionName, true);
 });
 
+test('mergeConfig defaults showHeadroom to false', () => {
+  const config = mergeConfig({});
+  assert.equal(config.display.showHeadroom, false);
+  assert.equal(DEFAULT_CONFIG.display.showHeadroom, false);
+});
+
+test('mergeConfig preserves explicit showHeadroom=true and rejects non-booleans', () => {
+  assert.equal(mergeConfig({ display: { showHeadroom: true } }).display.showHeadroom, true);
+  assert.equal(mergeConfig({ display: { showHeadroom: 'yes' } }).display.showHeadroom, false);
+  assert.equal(mergeConfig({ display: { showHeadroom: 1 } }).display.showHeadroom, false);
+});
+
 test('mergeConfig defaults provider options to off/empty', () => {
   const config = mergeConfig({});
   assert.equal(config.display.showProvider, false);

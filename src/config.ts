@@ -82,6 +82,7 @@ export type HudElement =
  *   cost:        session cost estimate
  *   speed:       output speed
  *   auth:        auth method / account
+ *   headroom:    headroom proxy savings for the session
  */
 export type FirstLineSegment =
   | 'model'
@@ -93,7 +94,8 @@ export type FirstLineSegment =
   | 'duration'
   | 'cost'
   | 'speed'
-  | 'auth';
+  | 'auth'
+  | 'headroom';
 
 export type AddedDirsLayout = 'inline' | 'line';
 export type HudColorName =
@@ -156,6 +158,7 @@ const PROJECT_LINE_SEGMENTS: FirstLineSegment[] = [
   'cost',
   'speed',
   'auth',
+  'headroom',
 ];
 
 // An empty order is deliberate: renderers retain their byte-for-byte native
@@ -222,6 +225,8 @@ export interface HudConfig {
     showAgents: boolean;
     showTodos: boolean;
     showSessionName: boolean;
+    // Show the headroom proxy's savings for the current session (tokens and cost saved), looked up from HEADROOM_PROXY_URL. Default off.
+    showHeadroom: boolean;
     // Show the auth method (subscription plan) for the current login,
     // e.g. "Claude Max 20x", as its own segment at the end of the first line.
     showAuth: boolean;
@@ -345,6 +350,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     showAgents: false,
     showTodos: false,
     showSessionName: false,
+    showHeadroom: false,
     showAuth: false,
     showAuthUser: false,
     authUserLength: 8,
@@ -863,6 +869,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     showSessionName: typeof migrated.display?.showSessionName === 'boolean'
       ? migrated.display.showSessionName
       : DEFAULT_CONFIG.display.showSessionName,
+    showHeadroom: typeof migrated.display?.showHeadroom === 'boolean'
+      ? migrated.display.showHeadroom
+      : DEFAULT_CONFIG.display.showHeadroom,
     showAuth: typeof migrated.display?.showAuth === 'boolean'
       ? migrated.display.showAuth
       : DEFAULT_CONFIG.display.showAuth,
