@@ -155,6 +155,10 @@ export function renderSessionLine(ctx: RenderContext): string {
     }
   }
 
+  if (display?.showAccount && ctx.accountLabel) {
+    push(label(ctx.accountLabel, colors), 'account');
+  }
+
   if (display?.showClaudeCodeVersion && ctx.claudeCodeVersion) {
     push(label(`CC v${ctx.claudeCodeVersion}`, colors), 'version');
   }

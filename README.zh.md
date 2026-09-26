@@ -219,6 +219,7 @@ Claude Code → stdin JSON → claude-hud → stdout → 在终端中显示
 | `display.showTodos` | boolean | false | 显示待办进度行 |
 | `display.showSessionName` | boolean | false | 显示会话 slug 或 `/rename` 设置的自定义标题 |
 | `display.showHeadroom` | boolean | false | 显示 headroom 代理的本会话节省，例如 `headroom 457k saved · 59% · $1.25`，数据来自 `GET $HEADROOM_PROXY_URL/stats/sessions/<会话 id>`，至多每 2 秒刷新一次。需要设置 `HEADROOM_PROXY_URL`；代理不可达时显示 `headroom: down` |
+| `display.showAccount` | boolean | false | 以 `邮箱 · 组织 · 计划` 形式显示登录账号（例如 `name@example.com · Acme · Team Premium`），来自 `~/.claude.json`（或 `$CLAUDE_CONFIG_DIR/.claude.json`）的 `oauthAccount`。计划标签：`Max 20x`、`Max 5x`、`Max`、`Pro`、`Team Standard`、`Team Premium`、`Team`、`Enterprise`；未映射的值按原样显示。令牌/API 密钥会话（设置了 `ANTHROPIC_AUTH_TOKEN` 或 `ANTHROPIC_API_KEY`）显示 `CLAUDE_USE_PROVIDER`（若设置），否则显示 `ANTHROPIC_BASE_URL` 的主机名，否则不显示 |
 | `display.showAuth` | boolean | false | 在第一行末尾显示当前登录的认证方式（订阅计划），例如 `Claude Max 20x`。来自 `~/.claude.json`（或覆盖配置目录时的 `$CLAUDE_CONFIG_DIR/.claude.json`）的 `oauthAccount`；无 OAuth 但设置了 `ANTHROPIC_API_KEY` 时显示 `API Key` |
 | `display.showAuthUser` | boolean | false | 在认证方式旁显示已登录账号（邮箱本地部分，回退到资料显示名） |
 | `display.authUserLength` | number | `8` | 账号名截断前的最大字符数，超出以 `…` 截断。`0` 显示全名 |

@@ -2439,6 +2439,12 @@ test('renderSessionLine does not add a synthetic subscriber label from usageData
   const line = renderSessionLine(ctx);
   assert.ok(line.includes('Opus'), 'should include model name');
   assert.ok(!line.includes('Max'), 'should not include plan name derived outside stdin');
+
+  // The account label appears only when the user opts in via showAccount.
+  ctx.config.display.showAccount = true;
+  ctx.accountLabel = 'someone@example.com · ExaDev · Max 20x';
+  const optedIn = stripAnsi(renderSessionLine(ctx));
+  assert.ok(optedIn.includes('someone@example.com · ExaDev · Max 20x'), `expected account label, got: ${optedIn}`);
 });
 
 test('renderSessionLine does not guess API auth from environment variables alone', () => {
@@ -2457,6 +2463,11 @@ test('renderSessionLine does not guess API auth from environment variables alone
     const line = renderSessionLine(ctx);
     assert.ok(!line.includes('API'), 'should not guess API auth from ANTHROPIC_API_KEY alone');
     assert.ok(!line.includes('Max'), 'should not include subscriber plan label');
+
+    // Even opted in, an API-key session with no provider label and no OAuth account renders no account segment.
+    ctx.config.display.showAccount = true;
+    ctx.accountLabel = null;
+    assert.ok(!stripAnsi(renderSessionLine(ctx)).includes('Max'));
   } finally {
     if (savedApiKey === undefined) {
       delete process.env.ANTHROPIC_API_KEY;
@@ -2464,6 +2475,19 @@ test('renderSessionLine does not guess API auth from environment variables alone
       process.env.ANTHROPIC_API_KEY = savedApiKey;
     }
   }
+});
+
+test('renderProjectLine shows the account segment only when showAccount is on', () => {
+  const ctx = baseContext();
+  ctx.config.lineLayout = 'expanded';
+  ctx.accountLabel = 'someone@example.com · ExaDev · Team Premium';
+
+  const byDefault = stripAnsi(renderProjectLine(ctx) ?? '');
+  assert.ok(!byDefault.includes('someone@example.com'), 'account must remain opt-in');
+
+  ctx.config.display.showAccount = true;
+  const optedIn = stripAnsi(renderProjectLine(ctx) ?? '');
+  assert.ok(optedIn.includes('someone@example.com · ExaDev · Team Premium'), `expected account label, got: ${optedIn}`);
 });
 
 test('renderProjectLine does not guess API auth from environment variables alone', () => {

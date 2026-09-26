@@ -141,6 +141,18 @@ test('mergeConfig preserves explicit showHeadroom=true and rejects non-booleans'
   assert.equal(mergeConfig({ display: { showHeadroom: 1 } }).display.showHeadroom, false);
 });
 
+test('mergeConfig defaults showAccount to false', () => {
+  const config = mergeConfig({});
+  assert.equal(config.display.showAccount, false);
+  assert.equal(DEFAULT_CONFIG.display.showAccount, false);
+});
+
+test('mergeConfig preserves explicit showAccount=true and rejects non-booleans', () => {
+  assert.equal(mergeConfig({ display: { showAccount: true } }).display.showAccount, true);
+  assert.equal(mergeConfig({ display: { showAccount: 'yes' } }).display.showAccount, false);
+  assert.equal(mergeConfig({ display: { showAccount: 1 } }).display.showAccount, false);
+});
+
 test('mergeConfig defaults provider options to off/empty', () => {
   const config = mergeConfig({});
   assert.equal(config.display.showProvider, false);

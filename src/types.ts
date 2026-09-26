@@ -219,4 +219,6 @@ export interface RenderContext {
   authInfo?: AuthInfo | null;
   // Headroom proxy savings for the session (see headroom.ts). Only populated when display.showHeadroom is on and HEADROOM_PROXY_URL is set.
   headroomInfo?: HeadroomInfo | null;
+  // Ready-to-render account label (see account.ts): "email · organisation · plan", or the provider label for token/API-key sessions. Only populated when display.showAccount is on.
+  accountLabel?: string | null;
 }

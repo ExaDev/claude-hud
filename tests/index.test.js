@@ -853,6 +853,67 @@ test("main reads headroom stats only when the segment is enabled and the proxy i
   assert.equal(renderedContext?.headroomInfo, null);
 });
 
+test("main builds the account label only when showAccount is on", async () => {
+  let renderedContext;
+  let lookupCalls = 0;
+  const accountInfo = {
+    emailAddress: "jmearman@sourcepulp.com",
+    organizationName: "ExaDev",
+    plan: "Team Premium",
+  };
+
+  const run = async (display, env = {}) => {
+    const saved = {
+      ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN,
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+      CLAUDE_USE_PROVIDER: process.env.CLAUDE_USE_PROVIDER,
+      ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL,
+    };
+    for (const name of Object.keys(saved)) {
+      delete process.env[name];
+    }
+    Object.assign(process.env, env);
+    try {
+      await main({
+        readStdin: async () => makeStdin(),
+        parseTranscript: async () => makeTranscript(),
+        countConfigs: async () => makeCounts(),
+        loadConfig: async () => makeConfig({ display }),
+        getGitStatus: async () => null,
+        readAccountInfo: () => {
+          lookupCalls += 1;
+          return accountInfo;
+        },
+        render: (ctx) => {
+          renderedContext = ctx;
+        },
+      });
+    } finally {
+      for (const [name, value] of Object.entries(saved)) {
+        if (value === undefined) {
+          delete process.env[name];
+        } else {
+          process.env[name] = value;
+        }
+      }
+    }
+  };
+
+  await run({ showAccount: true });
+  assert.equal(lookupCalls, 1);
+  assert.equal(renderedContext?.accountLabel, "jmearman@sourcepulp.com · ExaDev · Team Premium");
+
+  // Off by default: no file I/O and no label.
+  await run({});
+  assert.equal(lookupCalls, 1);
+  assert.equal(renderedContext?.accountLabel, null);
+
+  // A provider session never reads the OAuth account file.
+  await run({ showAccount: true }, { ANTHROPIC_AUTH_TOKEN: "tok", CLAUDE_USE_PROVIDER: "my-gateway" });
+  assert.equal(lookupCalls, 1);
+  assert.equal(renderedContext?.accountLabel, "my-gateway");
+});
+
 test("main merges scoped windows from the external snapshot when stdin lacks them", async () => {
   let renderedContext;
   const scopedWindows = [{ label: "Fable", percent: 89, resetAt: new Date("2026-04-27T12:00:00.000Z") }];

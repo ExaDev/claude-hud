@@ -4,18 +4,25 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-27
+
 ### Added
 - `display.showDailyCost` option to show today's cumulative spend across sessions (`Today $12.34`), accumulated from the native stdin `cost.total_cost_usd` into a per-day ledger that resets at local midnight (#695).
 - `display.showHeadroom` option to show the headroom proxy's per-session savings (`headroom 457k saved · 59% · $1.25`), read from `HEADROOM_PROXY_URL`, cached per session, with a visible `headroom: down` label when the proxy is unreachable.
+- `display.showAccount` option to show the logged-in account as `email · organisation · plan` (e.g. `Max 20x`, `Team Premium`) from the `oauthAccount` block of claude.json, or the provider label (`CLAUDE_USE_PROVIDER`, else the `ANTHROPIC_BASE_URL` hostname) for token/API-key sessions.
 
 ### Fixed
 - Refresh the prompt-cache clock when a request starts rather than when its response arrives, ignoring client-side slash command records, interrupt markers, and subagent requests (#719).
 - Treat Agent `tool_result` payloads with `isAsync` or `status: async_launched` as background so the agents line stays up until the task-notification (#734).
 - Pass `--no-optional-locks` on `git diff --numstat` so a timed-out statusline poll cannot leave `.git/index.lock` behind (#726).
 - Render the prompt-cache clock as `until <time>` so the value reads as expiry, not write time (#727).
+- Read claude.json from inside `CLAUDE_CONFIG_DIR` (`$CLAUDE_CONFIG_DIR/.claude.json`) instead of a `.json` sidecar of the directory, so auth info and user-scope MCP counts follow the file Claude Code actually writes.
 
 ### Docs
 - Add the ten missing config options and the absolute-path caveat for `display.externalUsagePath` to `README.zh.md` (#730).
+
+### Fork notes
+- The marketplace plugin name is now `claude-hud-exadev` so this fork installs alongside the upstream `claude-hud` plugin.
 
 ## [0.8.0] - 2026-08-18
 

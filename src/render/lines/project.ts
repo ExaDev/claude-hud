@@ -143,6 +143,10 @@ export function renderProjectLine(ctx: RenderContext): string | null {
     }
   }
 
+  if (display?.showAccount && ctx.accountLabel) {
+    push(label(ctx.accountLabel, colors), 'account');
+  }
+
   if (display?.showClaudeCodeVersion && ctx.claudeCodeVersion) {
     push(label(`CC v${ctx.claudeCodeVersion}`, colors), 'version');
   }

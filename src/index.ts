@@ -10,6 +10,7 @@ import { getClaudeCodeVersion } from "./version.js";
 import { getMemoryUsage } from "./memory.js";
 import { readAuthInfo } from "./auth.js";
 import { fetchHeadroomStats, getHeadroomProxyUrl } from "./headroom.js";
+import { readAccountInfo, resolveProviderLabel, formatAccountLabel } from "./account.js";
 import { resolveEffortLevel } from "./effort.js";
 import { applyContextWindowFallback } from "./context-cache.js";
 import { getUsageFromExternalSnapshot, writeExternalUsageSnapshot } from "./external-usage.js";
@@ -39,6 +40,7 @@ export type MainDeps = {
   getMemoryUsage: typeof getMemoryUsage;
   readAuthInfo: typeof readAuthInfo;
   fetchHeadroomStats: typeof fetchHeadroomStats;
+  readAccountInfo: typeof readAccountInfo;
   applyContextWindowFallback: typeof applyContextWindowFallback;
   render: typeof render;
   now: () => number;
@@ -104,6 +106,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
     getMemoryUsage,
     readAuthInfo,
     fetchHeadroomStats,
+    readAccountInfo,
     applyContextWindowFallback,
     render,
     now: () => Date.now(),
@@ -206,6 +209,15 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       config.display.showHeadroom && getHeadroomProxyUrl()
         ? await deps.fetchHeadroomStats(stdin)
         : null;
+    const accountProviderLabel = resolveProviderLabel();
+    const accountInfo =
+      config.display.showAccount && !accountProviderLabel
+        ? deps.readAccountInfo()
+        : null;
+    const accountLabel =
+      config.display.showAccount
+        ? formatAccountLabel(accountInfo, accountProviderLabel)
+        : null;
 
     const ctx: RenderContext = {
       stdin,
@@ -226,6 +238,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       effortSymbol: effortInfo?.symbol,
       authInfo,
       headroomInfo,
+      accountLabel,
     };
 
     deps.render(ctx);
