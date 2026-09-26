@@ -115,6 +115,7 @@ test('getHeadroomProxyUrl requires the env var and drops trailing slashes', () =
 test('fetchHeadroomStats fetches, caches, and serves the cache within the refresh interval', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'hud-headroom-'));
   const originalUrl = process.env.HEADROOM_PROXY_URL;
+  const originalConfigDir = process.env.CLAUDE_CONFIG_DIR;
   let now = 1_000_000;
   let calls = 0;
   const deps = {
@@ -126,6 +127,9 @@ test('fetchHeadroomStats fetches, caches, and serves the cache within the refres
       return jsonResponse(SAMPLE_ROW);
     },
   };
+
+  // The cache lives under getHudPluginDir, which honours CLAUDE_CONFIG_DIR when set; without pinning it to the temp dir the test would read and write the developer's real plugin cache (claude-use always exports the variable).
+  process.env.CLAUDE_CONFIG_DIR = dir;
 
   try {
     process.env.HEADROOM_PROXY_URL = 'http://127.0.0.1:8080';
@@ -145,6 +149,7 @@ test('fetchHeadroomStats fetches, caches, and serves the cache within the refres
     assert.equal(calls, 2);
   } finally {
     restoreEnvVar('HEADROOM_PROXY_URL', originalUrl);
+    restoreEnvVar('CLAUDE_CONFIG_DIR', originalConfigDir);
     await rm(dir, { recursive: true, force: true });
   }
 });
@@ -152,6 +157,7 @@ test('fetchHeadroomStats fetches, caches, and serves the cache within the refres
 test('fetchHeadroomStats renders down, keeping recent numbers then dropping stale ones', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'hud-headroom-down-'));
   const originalUrl = process.env.HEADROOM_PROXY_URL;
+  const originalConfigDir = process.env.CLAUDE_CONFIG_DIR;
   let now = 1_000_000;
   let ok = true;
   const deps = {
@@ -164,6 +170,9 @@ test('fetchHeadroomStats renders down, keeping recent numbers then dropping stal
       return jsonResponse(SAMPLE_ROW);
     },
   };
+
+  // Same isolation as above: the grace-window cache reads must not touch the real plugin dir.
+  process.env.CLAUDE_CONFIG_DIR = dir;
 
   try {
     process.env.HEADROOM_PROXY_URL = 'http://127.0.0.1:8080';
@@ -183,6 +192,7 @@ test('fetchHeadroomStats renders down, keeping recent numbers then dropping stal
     assert.equal(stale.stats.tokensSaved, null);
   } finally {
     restoreEnvVar('HEADROOM_PROXY_URL', originalUrl);
+    restoreEnvVar('CLAUDE_CONFIG_DIR', originalConfigDir);
     await rm(dir, { recursive: true, force: true });
   }
 });
