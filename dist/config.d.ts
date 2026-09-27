@@ -50,8 +50,10 @@ export type HudElement = 'project' | 'addedDirs' | 'context' | 'usage' | 'prompt
  *   cost:        session cost estimate
  *   speed:       output speed
  *   auth:        auth method / account
+ *   headroom:    headroom proxy savings for the session
+ *   account:     logged-in account (email · organisation · plan)
  */
-export type FirstLineSegment = 'model' | 'project' | 'advisor' | 'sessionName' | 'version' | 'extra' | 'duration' | 'cost' | 'speed' | 'auth';
+export type FirstLineSegment = 'model' | 'project' | 'advisor' | 'sessionName' | 'version' | 'extra' | 'duration' | 'cost' | 'speed' | 'auth' | 'headroom' | 'account';
 export type AddedDirsLayout = 'inline' | 'line';
 export type HudColorName = 'dim' | 'red' | 'green' | 'yellow' | 'magenta' | 'cyan' | 'brightBlue' | 'brightMagenta';
 /** A color value: named preset, 256-color index (0-255), or hex string (#rrggbb). */
@@ -125,6 +127,8 @@ export interface HudConfig {
         showAgents: boolean;
         showTodos: boolean;
         showSessionName: boolean;
+        showHeadroom: boolean;
+        showAccount: boolean;
         showAuth: boolean;
         showAuthUser: boolean;
         authUserLength: number;

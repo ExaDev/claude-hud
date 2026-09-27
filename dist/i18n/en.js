@@ -15,10 +15,12 @@ export const en = {
     "label.lastReply": "Last reply",
     "label.advisor": "Advisor",
     "label.compactions": "Compactions",
+    "label.headroom": "headroom",
     // Status
     "status.limitReached": "Limit reached",
     "status.allTodosComplete": "All todos complete",
     "status.expired": "expired",
+    "status.headroomDown": "down",
     // Format
     "format.resets": "resets",
     "format.resetsIn": "resets in",
@@ -26,6 +28,7 @@ export const en = {
     "format.untilTime": "until {time}",
     "format.in": "in",
     "format.cache": "cache",
+    "format.saved": "saved",
     "format.out": "out",
     "format.tok": "tok",
     "format.tokPerSec": "tok/s",

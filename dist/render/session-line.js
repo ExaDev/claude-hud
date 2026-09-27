@@ -11,6 +11,7 @@ import { t } from '../i18n/index.js';
 import { formatResetTime } from './format-reset-time.js';
 import { formatTokens, formatContextValue } from '../utils/format.js';
 import { formatAuthSegment } from '../auth.js';
+import { formatHeadroomLabel } from '../headroom.js';
 import { createDebug } from '../debug.js';
 import { formatModelDisplay } from './model-display.js';
 import { formatSessionTokenSummary } from './lines/session-tokens.js';
@@ -133,6 +134,15 @@ export function renderSessionLine(ctx) {
     // Session name (custom title from /rename, or auto-generated slug)
     if (display?.showSessionName && ctx.transcript.sessionName) {
         push(label(ctx.transcript.sessionName, colors), 'sessionName');
+    }
+    if (display?.showHeadroom) {
+        const headroomLabel = ctx.headroomInfo ? formatHeadroomLabel(ctx.headroomInfo) : null;
+        if (headroomLabel) {
+            push(label(headroomLabel, colors), 'headroom');
+        }
+    }
+    if (display?.showAccount && ctx.accountLabel) {
+        push(label(ctx.accountLabel, colors), 'account');
     }
     if (display?.showClaudeCodeVersion && ctx.claudeCodeVersion) {
         push(label(`CC v${ctx.claudeCodeVersion}`, colors), 'version');

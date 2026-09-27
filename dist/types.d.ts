@@ -1,6 +1,7 @@
 import type { HudConfig } from './config.js';
 import type { GitStatus } from './git.js';
 import type { AuthInfo } from './auth.js';
+import type { HeadroomInfo } from './headroom.js';
 export interface StdinData {
     session_id?: string;
     transcript_path?: string;
@@ -177,5 +178,7 @@ export interface RenderContext {
     effortLevel?: string;
     effortSymbol?: string;
     authInfo?: AuthInfo | null;
+    headroomInfo?: HeadroomInfo | null;
+    accountLabel?: string | null;
 }
 //# sourceMappingURL=types.d.ts.map

@@ -38,6 +38,8 @@ const PROJECT_LINE_SEGMENTS = [
     'cost',
     'speed',
     'auth',
+    'headroom',
+    'account',
 ];
 // An empty order is deliberate: renderers retain their byte-for-byte native
 // order until the user opts in to moving one or more segments.
@@ -95,6 +97,8 @@ export const DEFAULT_CONFIG = {
         showAgents: false,
         showTodos: false,
         showSessionName: false,
+        showHeadroom: false,
+        showAccount: false,
         showAuth: false,
         showAuthUser: false,
         authUserLength: 8,
@@ -546,6 +550,12 @@ export function mergeConfig(userConfig) {
         showSessionName: typeof migrated.display?.showSessionName === 'boolean'
             ? migrated.display.showSessionName
             : DEFAULT_CONFIG.display.showSessionName,
+        showHeadroom: typeof migrated.display?.showHeadroom === 'boolean'
+            ? migrated.display.showHeadroom
+            : DEFAULT_CONFIG.display.showHeadroom,
+        showAccount: typeof migrated.display?.showAccount === 'boolean'
+            ? migrated.display.showAccount
+            : DEFAULT_CONFIG.display.showAccount,
         showAuth: typeof migrated.display?.showAuth === 'boolean'
             ? migrated.display.showAuth
             : DEFAULT_CONFIG.display.showAuth,

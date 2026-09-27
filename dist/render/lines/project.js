@@ -10,6 +10,7 @@ import { normalizeAddedDirs, sanitize as sanitizeDisplayText, basenameOf, trunca
 import { getFileHref, safeHyperlink } from '../../utils/hyperlinks.js';
 import { formatModelDisplay } from '../model-display.js';
 import { formatAuthSegment } from '../../auth.js';
+import { formatHeadroomLabel } from '../../headroom.js';
 import { formatProjectPath } from '../project-path.js';
 import { DEFAULT_CONFIG, DEFAULT_PROJECT_LINE_ORDER } from '../../config.js';
 import { orderFirstLineParts } from '../first-line-order.js';
@@ -120,6 +121,15 @@ export function renderProjectLine(ctx) {
     }
     if (display?.showSessionName && ctx.transcript.sessionName) {
         push(label(ctx.transcript.sessionName, colors), 'sessionName');
+    }
+    if (display?.showHeadroom) {
+        const headroomLabel = ctx.headroomInfo ? formatHeadroomLabel(ctx.headroomInfo) : null;
+        if (headroomLabel) {
+            push(label(headroomLabel, colors), 'headroom');
+        }
+    }
+    if (display?.showAccount && ctx.accountLabel) {
+        push(label(ctx.accountLabel, colors), 'account');
     }
     if (display?.showClaudeCodeVersion && ctx.claudeCodeVersion) {
         push(label(`CC v${ctx.claudeCodeVersion}`, colors), 'version');

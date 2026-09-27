@@ -9,6 +9,8 @@ import { parseExtraCmdArg, runExtraCmd } from "./extra-cmd.js";
 import { getClaudeCodeVersion } from "./version.js";
 import { getMemoryUsage } from "./memory.js";
 import { readAuthInfo } from "./auth.js";
+import { fetchHeadroomStats } from "./headroom.js";
+import { readAccountInfo } from "./account.js";
 import { applyContextWindowFallback } from "./context-cache.js";
 import { getUsageFromExternalSnapshot, writeExternalUsageSnapshot } from "./external-usage.js";
 import type { GitStatus } from "./git.js";
@@ -30,6 +32,8 @@ export type MainDeps = {
     getClaudeCodeVersion: typeof getClaudeCodeVersion;
     getMemoryUsage: typeof getMemoryUsage;
     readAuthInfo: typeof readAuthInfo;
+    fetchHeadroomStats: typeof fetchHeadroomStats;
+    readAccountInfo: typeof readAccountInfo;
     applyContextWindowFallback: typeof applyContextWindowFallback;
     render: typeof render;
     now: () => number;

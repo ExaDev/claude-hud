@@ -15,10 +15,12 @@ export const zhHant = {
     "label.lastReply": "上次回覆",
     "label.advisor": "顧問",
     "label.compactions": "壓縮次數",
+    "label.headroom": "headroom",
     // Status
     "status.limitReached": "已達上限",
     "status.allTodosComplete": "全部完成",
     "status.expired": "已過期",
+    "status.headroomDown": "無法使用",
     // Format
     "format.resets": "重置於",
     "format.resetsIn": "重置剩餘",
@@ -26,6 +28,7 @@ export const zhHant = {
     "format.untilTime": "至 {time}",
     "format.in": "輸入",
     "format.cache": "快取",
+    "format.saved": "已節省",
     "format.out": "輸出",
     "format.tok": "tok",
     "format.tokPerSec": "tok/s",

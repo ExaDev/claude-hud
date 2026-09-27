@@ -9,6 +9,8 @@ import { parseExtraCmdArg, runExtraCmd } from "./extra-cmd.js";
 import { getClaudeCodeVersion } from "./version.js";
 import { getMemoryUsage } from "./memory.js";
 import { readAuthInfo } from "./auth.js";
+import { fetchHeadroomStats, getHeadroomProxyUrl } from "./headroom.js";
+import { readAccountInfo, resolveProviderLabel, formatAccountLabel } from "./account.js";
 import { resolveEffortLevel } from "./effort.js";
 import { applyContextWindowFallback } from "./context-cache.js";
 import { getUsageFromExternalSnapshot, writeExternalUsageSnapshot } from "./external-usage.js";
@@ -69,6 +71,8 @@ export async function main(overrides = {}) {
         getClaudeCodeVersion,
         getMemoryUsage,
         readAuthInfo,
+        fetchHeadroomStats,
+        readAccountInfo,
         applyContextWindowFallback,
         render,
         now: () => Date.now(),
@@ -151,6 +155,16 @@ export async function main(overrides = {}) {
         const authInfo = config.display.showAuth || config.display.showAuthUser
             ? deps.readAuthInfo()
             : null;
+        const headroomInfo = config.display.showHeadroom && getHeadroomProxyUrl()
+            ? await deps.fetchHeadroomStats(stdin)
+            : null;
+        const accountProviderLabel = resolveProviderLabel();
+        const accountInfo = config.display.showAccount && !accountProviderLabel
+            ? deps.readAccountInfo()
+            : null;
+        const accountLabel = config.display.showAccount
+            ? formatAccountLabel(accountInfo, accountProviderLabel)
+            : null;
         const ctx = {
             stdin,
             transcript,
@@ -169,6 +183,8 @@ export async function main(overrides = {}) {
             effortLevel: effortInfo?.level,
             effortSymbol: effortInfo?.symbol,
             authInfo,
+            headroomInfo,
+            accountLabel,
         };
         deps.render(ctx);
     }
