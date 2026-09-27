@@ -1,5 +1,5 @@
 {
-  "name": "claude-hud",
+  "name": "claude-hud-exadev",
   "owner": {
     "name": "Jarrod Watts",
     "email": "jarrodwattsyt@gmail.com"
@@ -10,11 +10,19 @@
   },
   "plugins": [
     {
-      "name": "claude-hud-exadev",
+      "name": "claude-hud",
       "source": "./",
       "description": "Real-time statusline showing context usage, active tools, running agents, and todo progress. Always visible below your input, zero config required.",
       "category": "monitoring",
-      "tags": ["hud", "statusline", "monitoring", "context", "tools", "agents", "todos"]
+      "tags": [
+        "hud",
+        "statusline",
+        "monitoring",
+        "context",
+        "tools",
+        "agents",
+        "todos"
+      ]
     }
   ]
 }
