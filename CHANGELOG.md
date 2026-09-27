@@ -4,6 +4,11 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-09-27
+
+### Fixed
+- A 404 from the headroom proxy (a session with no savings row yet) renders nothing instead of `headroom: down`; the down label is reserved for a proxy that cannot be reached.
+
 ## [0.9.1] - 2026-09-27
 
 ### Fixed

@@ -197,6 +197,27 @@ test('fetchHeadroomStats renders down, keeping recent numbers then dropping stal
   }
 });
 
+test('fetchHeadroomStats treats a 404 as no data yet, not as the proxy being down', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'hud-headroom-404-'));
+  const originalUrl = process.env.HEADROOM_PROXY_URL;
+  const originalConfigDir = process.env.CLAUDE_CONFIG_DIR;
+  const deps = {
+    homeDir: () => dir,
+    now: () => 1_000_000,
+    fetchImpl: async () => jsonResponse({ error: 'session_not_found' }, { ok: false, status: 404 }),
+  };
+
+  process.env.CLAUDE_CONFIG_DIR = dir;
+  try {
+    process.env.HEADROOM_PROXY_URL = 'http://127.0.0.1:8080';
+    assert.equal(await fetchHeadroomStats({ session_id: 'unrecorded' }, deps), null);
+  } finally {
+    restoreEnvVar('HEADROOM_PROXY_URL', originalUrl);
+    restoreEnvVar('CLAUDE_CONFIG_DIR', originalConfigDir);
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('fetchHeadroomStats returns null without a proxy URL or session id', async () => {
   const originalUrl = process.env.HEADROOM_PROXY_URL;
   let calls = 0;
