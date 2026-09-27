@@ -4,6 +4,11 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-27
+
+### Fixed
+- Fork installs no longer collide with upstream: the distinct name moved from the plugin (`claude-hud` again, so existing statusline commands find it under `plugins/cache/<marketplace>/claude-hud/`) to the marketplace itself (`claude-hud-exadev`).
+
 ## [0.9.0] - 2026-09-27
 
 ### Added
