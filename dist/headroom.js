@@ -209,6 +209,10 @@ export async function fetchHeadroomStats(stdin, deps = defaultDeps) {
             signal: AbortSignal.timeout(HEADROOM_TIMEOUT_MS),
             headers: { accept: 'application/json' },
         });
+        if (response.status === 404) {
+            // The proxy is up and answering; this session id just has no savings row yet (nothing has been recorded for it). That is "no data", not "proxy down": render nothing rather than the down label, and don't cache, so the segment appears as soon as the first row lands.
+            return null;
+        }
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
