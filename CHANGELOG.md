@@ -4,6 +4,13 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-10-01
+
+### Fixed
+- The account and auth caches are keyed by the `claude.json` path they were derived from instead of one fixed filename each. Identities that share one `plugins` directory (several `CLAUDE_CONFIG_DIR`s with `plugins/` symlinked to one location) no longer overwrite each other's account label, and a set and an unset `CLAUDE_CONFIG_DIR` no longer thrash a single cache entry. The old fixed-name files are removed on first read.
+- The cost test for Claude 5 point releases compares each with its base model on one clock, so it no longer fails once Sonnet 5's introductory rate has ended.
+- `marketplace.json` records the release in `metadata.version` instead of a stray top-level `metadata.version` key.
+
 ## [0.9.2] - 2026-09-27
 
 ### Fixed
