@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { getClaudeConfigJsonPath, getHudPluginDir } from './claude-config-dir.js';
 import { sanitizeDisplayText } from './utils/sanitize.js';
 const EMPTY_AUTH_INFO = { method: null, user: null };
@@ -75,10 +75,25 @@ export function deriveAuthInfo(claudeJson, env = process.env) {
     const user = email ? email.split('@')[0] : readString(account, 'displayName');
     return { method, user };
 }
-function authCachePath(homeDir) {
-    return path.join(getHudPluginDir(homeDir), AUTH_CACHE_DIRNAME, 'auth.json');
+// The cache filename is keyed on the source claude.json path (full sha256 hex, same style as the config cache in config-reader.ts). Several CLAUDE_CONFIG_DIRs can share one physical plugins dir (claude-use symlinks it across identities), where a fixed name is last-writer-wins and every identity's status line shows whichever login rendered last. Keying on the source path also keeps a set CLAUDE_CONFIG_DIR=<dir> and an unset variable on separate entries even when both resolve the same plugin dir, because they read different claude.json files.
+function authCachePath(homeDir, configJsonPath) {
+    const hash = createHash('sha256').update(configJsonPath).digest('hex');
+    return path.join(getHudPluginDir(homeDir), AUTH_CACHE_DIRNAME, `${hash}.json`);
+}
+// Remove the pre-0.9.3 fixed-name cache once, if present. In a shared plugins dir it holds whichever identity wrote last, so it is dead weight at best.
+function removeLegacyAuthCache(homeDir) {
+    try {
+        const legacyPath = path.join(getHudPluginDir(homeDir), AUTH_CACHE_DIRNAME, AUTH_LEGACY_CACHE_FILENAME);
+        if (fs.existsSync(legacyPath)) {
+            fs.unlinkSync(legacyPath);
+        }
+    }
+    catch {
+        // Best effort: cleanup must never break the status line.
+    }
 }
 const AUTH_CACHE_DIRNAME = 'auth-cache';
+const AUTH_LEGACY_CACHE_FILENAME = 'auth.json';
 const AUTH_CACHE_VERSION = 1;
 const AUTH_CACHE_MAX_BYTES = 4096;
 function normalizeCachedValue(value) {
@@ -89,11 +104,11 @@ function normalizeCachedValue(value) {
     }
     return sanitizeValue(value) === value ? value : undefined;
 }
-function readAuthCache(homeDir) {
+function readAuthCache(homeDir, configJsonPath) {
     let fd;
     try {
         const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
-        fd = fs.openSync(authCachePath(homeDir), flags);
+        fd = fs.openSync(authCachePath(homeDir, configJsonPath), flags);
         const cacheStat = fs.fstatSync(fd);
         if (!cacheStat.isFile() || cacheStat.size <= 0 || cacheStat.size > AUTH_CACHE_MAX_BYTES) {
             return null;
@@ -130,11 +145,11 @@ function readAuthCache(homeDir) {
         }
     }
 }
-function writeAuthCache(homeDir, entry) {
+function writeAuthCache(homeDir, configJsonPath, entry) {
     let tmpPath;
     let fd;
     try {
-        const cachePath = authCachePath(homeDir);
+        const cachePath = authCachePath(homeDir, configJsonPath);
         const cacheDir = path.dirname(cachePath);
         fs.mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
         const dirStat = fs.lstatSync(cacheDir);
@@ -192,6 +207,7 @@ export function readAuthInfo() {
     }
     const homeDir = os.homedir();
     const configJsonPath = getClaudeConfigJsonPath(homeDir);
+    removeLegacyAuthCache(homeDir);
     let stat;
     try {
         stat = fs.statSync(configJsonPath);
@@ -199,7 +215,7 @@ export function readAuthInfo() {
     catch {
         return EMPTY_AUTH_INFO;
     }
-    const cached = readAuthCache(homeDir);
+    const cached = readAuthCache(homeDir, configJsonPath);
     if (cached
         && cached.mtimeMs === stat.mtimeMs
         && cached.ctimeMs === stat.ctimeMs
@@ -211,7 +227,7 @@ export function readAuthInfo() {
     try {
         const content = fs.readFileSync(configJsonPath, 'utf-8');
         const info = deriveAuthInfo(JSON.parse(content));
-        writeAuthCache(homeDir, {
+        writeAuthCache(homeDir, configJsonPath, {
             version: AUTH_CACHE_VERSION,
             mtimeMs: stat.mtimeMs,
             ctimeMs: stat.ctimeMs,
