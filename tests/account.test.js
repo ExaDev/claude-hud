@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -11,6 +12,12 @@ import {
   readAccountInfo,
   resolveProviderLabel,
 } from '../dist/account.js';
+
+// Cache files are keyed on the source claude.json path; the expected name is derived the same way here so a regression to a fixed name fails the assertion.
+function accountCacheFile(configDir, jsonPath) {
+  const hash = createHash('sha256').update(jsonPath).digest('hex');
+  return path.join(configDir, 'plugins', 'claude-hud', 'account-cache', `${hash}.json`);
+}
 
 function restoreEnvVar(name, value) {
   if (value === undefined) {
@@ -118,7 +125,8 @@ test('readAccountInfo reads the in-config-dir .claude.json and caches the derive
     delete process.env.ANTHROPIC_API_KEY;
     process.env.CLAUDE_CONFIG_DIR = configDir;
     fsSync.mkdirSync(configDir, { recursive: true });
-    await writeFile(path.join(configDir, '.claude.json'), JSON.stringify(TEAM_ACCOUNT), 'utf8');
+    const jsonPath = path.join(configDir, '.claude.json');
+    await writeFile(jsonPath, JSON.stringify(TEAM_ACCOUNT), 'utf8');
 
     assert.deepEqual(readAccountInfo(), {
       emailAddress: 'jmearman@sourcepulp.com',
@@ -126,10 +134,15 @@ test('readAccountInfo reads the in-config-dir .claude.json and caches the derive
       plan: 'Team Premium',
     });
 
-    const cacheFile = path.join(configDir, 'plugins', 'claude-hud', 'account-cache', 'account.json');
+    const cacheFile = accountCacheFile(configDir, jsonPath);
     assert.ok(fsSync.existsSync(cacheFile), 'first read must write a cache entry');
     assert.equal(fsSync.statSync(path.dirname(cacheFile)).mode & 0o777, 0o700);
     assert.equal(fsSync.statSync(cacheFile).mode & 0o777, 0o600);
+    assert.equal(
+      fsSync.existsSync(path.join(configDir, 'plugins', 'claude-hud', 'account-cache', 'account.json')),
+      false,
+      'the unkeyed legacy cache name must not be written',
+    );
   } finally {
     for (const [name, value] of Object.entries(originals)) {
       restoreEnvVar(name, value);
@@ -158,6 +171,80 @@ test('readAccountInfo returns null for provider sessions and missing files', asy
     await writeFile(path.join(dir, '.claude', '.claude.json'), JSON.stringify(TEAM_ACCOUNT), 'utf8');
     process.env.ANTHROPIC_AUTH_TOKEN = 'tok';
     assert.equal(readAccountInfo(), null);
+  } finally {
+    for (const [name, value] of Object.entries(originals)) {
+      restoreEnvVar(name, value);
+    }
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+const GMAIL_ACCOUNT = {
+  oauthAccount: {
+    emailAddress: 'joseph.mearman@gmail.com',
+    organizationName: null,
+    organizationType: 'claude_pro',
+  },
+};
+
+// claude-use symlinks one plugins dir across identities, so both config dirs below resolve the SAME physical claude-hud cache directory while reading different .claude.json files. A fixed cache name there is last-writer-wins and every identity's status line shows whichever account rendered last.
+test('readAccountInfo gives each config dir its own cache file when identities share a plugins dir', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'hud-account-shared-'));
+  const configDirA = path.join(dir, 'identity-a', '.claude');
+  const configDirB = path.join(dir, 'identity-b', '.claude');
+  const sharedPlugins = path.join(dir, 'shared-plugins');
+  const originals = {
+    CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR,
+    ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN,
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  };
+  const fsSync = await import('node:fs');
+
+  try {
+    delete process.env.ANTHROPIC_AUTH_TOKEN;
+    delete process.env.ANTHROPIC_API_KEY;
+    await mkdir(configDirA, { recursive: true });
+    await mkdir(configDirB, { recursive: true });
+    await mkdir(path.join(sharedPlugins, 'claude-hud', 'account-cache'), { recursive: true });
+
+    const jsonPathA = path.join(configDirA, '.claude.json');
+    const jsonPathB = path.join(configDirB, '.claude.json');
+    await writeFile(jsonPathA, JSON.stringify(TEAM_ACCOUNT), 'utf8');
+    await writeFile(jsonPathB, JSON.stringify(GMAIL_ACCOUNT), 'utf8');
+
+    // The legacy fixed-name cache from an older version, sitting in the shared dir.
+    const legacyFile = path.join(sharedPlugins, 'claude-hud', 'account-cache', 'account.json');
+    await writeFile(legacyFile, '{"version":1,"emailAddress":"stale@shared.test"}', 'utf8');
+
+    fsSync.symlinkSync(sharedPlugins, path.join(configDirA, 'plugins'), 'dir');
+    fsSync.symlinkSync(sharedPlugins, path.join(configDirB, 'plugins'), 'dir');
+
+    process.env.CLAUDE_CONFIG_DIR = configDirA;
+    assert.deepEqual(readAccountInfo(), {
+      emailAddress: 'jmearman@sourcepulp.com',
+      organizationName: 'ExaDev',
+      plan: 'Team Premium',
+    });
+
+    process.env.CLAUDE_CONFIG_DIR = configDirB;
+    assert.deepEqual(readAccountInfo(), {
+      emailAddress: 'joseph.mearman@gmail.com',
+      organizationName: null,
+      plan: 'Pro',
+    });
+
+    const cacheA = path.join(sharedPlugins, 'claude-hud', 'account-cache', `${createHash('sha256').update(jsonPathA).digest('hex')}.json`);
+    const cacheB = path.join(sharedPlugins, 'claude-hud', 'account-cache', `${createHash('sha256').update(jsonPathB).digest('hex')}.json`);
+    assert.ok(fsSync.existsSync(cacheA), 'identity A must have its own keyed cache file');
+    assert.ok(fsSync.existsSync(cacheB), 'identity B must have its own keyed cache file');
+    assert.notEqual(cacheA, cacheB);
+    assert.equal(JSON.parse(fsSync.readFileSync(cacheA, 'utf8')).emailAddress, 'jmearman@sourcepulp.com');
+    assert.equal(JSON.parse(fsSync.readFileSync(cacheB, 'utf8')).emailAddress, 'joseph.mearman@gmail.com');
+
+    // Reading B must not have clobbered A's entry, and the legacy file is gone.
+    process.env.CLAUDE_CONFIG_DIR = configDirA;
+    assert.equal(readAccountInfo().emailAddress, 'jmearman@sourcepulp.com');
+    assert.equal(fsSync.existsSync(legacyFile), false, 'the legacy fixed-name cache must be removed');
   } finally {
     for (const [name, value] of Object.entries(originals)) {
       restoreEnvVar(name, value);

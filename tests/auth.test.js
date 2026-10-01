@@ -1,9 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { deriveAuthInfo, readAuthInfo, truncateUser, formatAuthSegment } from '../dist/auth.js';
+
+// Cache files are keyed on the source claude.json path; the expected name is derived the same way here so a regression to a fixed name fails the assertion.
+function authCacheFile(configDir, jsonPath) {
+  const hash = createHash('sha256').update(jsonPath).digest('hex');
+  return path.join(configDir, 'plugins', 'claude-hud', 'auth-cache', `${hash}.json`);
+}
 
 const MAX_ACCOUNT = {
   oauthAccount: {
@@ -167,7 +174,7 @@ test('readAuthInfo caches derived auth and serves it on an unchanged file', asyn
 
     assert.deepEqual(readAuthInfo(), { method: 'Claude Max 20x', user: 'someone.long' });
 
-    const cacheFile = path.join(configDir, 'plugins', 'claude-hud', 'auth-cache', 'auth.json');
+    const cacheFile = authCacheFile(configDir, jsonPath);
     assert.ok(fsSync.existsSync(cacheFile), 'first read must write a cache entry');
 
     assert.deepEqual(readAuthInfo(), { method: 'Claude Max 20x', user: 'someone.long' });
@@ -226,7 +233,7 @@ test('readAuthInfo busts the cache when only the SIZE differs', async () => {
     await writeFile(jsonPath, JSON.stringify(MAX_ACCOUNT), 'utf8');
     assert.equal(readAuthInfo().user, 'someone.long', 'seed the cache');
 
-    const cacheFile = path.join(configDir, 'plugins', 'claude-hud', 'auth-cache', 'auth.json');
+    const cacheFile = authCacheFile(configDir, jsonPath);
     const stat = fsSync.statSync(jsonPath);
     fsSync.writeFileSync(cacheFile, JSON.stringify({
       version: 1,
@@ -263,7 +270,7 @@ test('readAuthInfo rejects a poisoned cache even when source identity matches', 
     await writeFile(jsonPath, JSON.stringify(MAX_ACCOUNT), 'utf8');
     assert.equal(readAuthInfo().user, 'someone.long');
 
-    const cacheFile = path.join(configDir, 'plugins', 'claude-hud', 'auth-cache', 'auth.json');
+    const cacheFile = authCacheFile(configDir, jsonPath);
     const stat = fsSync.statSync(jsonPath);
     fsSync.writeFileSync(cacheFile, JSON.stringify({
       version: 1,
@@ -295,10 +302,11 @@ test('readAuthInfo rejects symlink cache files without touching their target', a
     delete process.env.ANTHROPIC_API_KEY;
     process.env.CLAUDE_CONFIG_DIR = configDir;
     fsSync.mkdirSync(configDir, { recursive: true });
-    await writeFile(path.join(configDir, '.claude.json'), JSON.stringify(MAX_ACCOUNT), 'utf8');
+    const jsonPath = path.join(configDir, '.claude.json');
+    await writeFile(jsonPath, JSON.stringify(MAX_ACCOUNT), 'utf8');
     assert.equal(readAuthInfo().user, 'someone.long');
 
-    const cacheFile = path.join(configDir, 'plugins', 'claude-hud', 'auth-cache', 'auth.json');
+    const cacheFile = authCacheFile(configDir, jsonPath);
     const target = path.join(dir, 'target.json');
     await writeFile(target, 'do-not-touch', 'utf8');
     fsSync.unlinkSync(cacheFile);
@@ -337,6 +345,66 @@ test('readAuthInfo detects same-size rewrites with a restored mtime', async () =
     fsSync.utimesSync(jsonPath, originalStat.atime, originalStat.mtime);
 
     assert.equal(readAuthInfo().user, 'another.long');
+  } finally {
+    restoreEnvVar('CLAUDE_CONFIG_DIR', original);
+    restoreEnvVar('ANTHROPIC_API_KEY', originalKey);
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+const OTHER_LOGIN = {
+  oauthAccount: {
+    emailAddress: 'other.user@example.org',
+    organizationType: 'claude_pro',
+  },
+};
+
+// claude-use symlinks one plugins dir across identities, so both config dirs below resolve the SAME physical claude-hud cache directory while reading different .claude.json files. A fixed cache name there is last-writer-wins and every identity's status line shows whichever login rendered last.
+test('readAuthInfo gives each config dir its own cache file when identities share a plugins dir', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'hud-auth-shared-'));
+  const configDirA = path.join(dir, 'identity-a', '.claude');
+  const configDirB = path.join(dir, 'identity-b', '.claude');
+  const sharedPlugins = path.join(dir, 'shared-plugins');
+  const original = process.env.CLAUDE_CONFIG_DIR;
+  const originalKey = process.env.ANTHROPIC_API_KEY;
+  const fsSync = await import('node:fs');
+
+  try {
+    delete process.env.ANTHROPIC_API_KEY;
+    await mkdir(configDirA, { recursive: true });
+    await mkdir(configDirB, { recursive: true });
+    await mkdir(path.join(sharedPlugins, 'claude-hud', 'auth-cache'), { recursive: true });
+
+    const jsonPathA = path.join(configDirA, '.claude.json');
+    const jsonPathB = path.join(configDirB, '.claude.json');
+    await writeFile(jsonPathA, JSON.stringify(MAX_ACCOUNT), 'utf8');
+    await writeFile(jsonPathB, JSON.stringify(OTHER_LOGIN), 'utf8');
+
+    // The legacy fixed-name cache from an older version, sitting in the shared dir.
+    const legacyFile = path.join(sharedPlugins, 'claude-hud', 'auth-cache', 'auth.json');
+    await writeFile(legacyFile, '{"version":1,"user":"stale@shared.test"}', 'utf8');
+
+    fsSync.symlinkSync(sharedPlugins, path.join(configDirA, 'plugins'), 'dir');
+    fsSync.symlinkSync(sharedPlugins, path.join(configDirB, 'plugins'), 'dir');
+
+    process.env.CLAUDE_CONFIG_DIR = configDirA;
+    assert.deepEqual(readAuthInfo(), { method: 'Claude Max 20x', user: 'someone.long' });
+
+    process.env.CLAUDE_CONFIG_DIR = configDirB;
+    assert.deepEqual(readAuthInfo(), { method: 'Claude Pro', user: 'other.user' });
+
+    const cacheA = path.join(sharedPlugins, 'claude-hud', 'auth-cache', `${createHash('sha256').update(jsonPathA).digest('hex')}.json`);
+    const cacheB = path.join(sharedPlugins, 'claude-hud', 'auth-cache', `${createHash('sha256').update(jsonPathB).digest('hex')}.json`);
+    assert.ok(fsSync.existsSync(cacheA), 'identity A must have its own keyed cache file');
+    assert.ok(fsSync.existsSync(cacheB), 'identity B must have its own keyed cache file');
+    assert.notEqual(cacheA, cacheB);
+    assert.equal(JSON.parse(fsSync.readFileSync(cacheA, 'utf8')).user, 'someone.long');
+    assert.equal(JSON.parse(fsSync.readFileSync(cacheB, 'utf8')).user, 'other.user');
+
+    // Reading B must not have clobbered A's entry, and the legacy file is gone.
+    process.env.CLAUDE_CONFIG_DIR = configDirA;
+    assert.equal(readAuthInfo().user, 'someone.long');
+    assert.equal(fsSync.existsSync(legacyFile), false, 'the legacy fixed-name cache must be removed');
   } finally {
     restoreEnvVar('CLAUDE_CONFIG_DIR', original);
     restoreEnvVar('ANTHROPIC_API_KEY', originalKey);

@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { getClaudeConfigJsonPath, getHudPluginDir } from './claude-config-dir.js';
 import { sanitizeDisplayText } from './utils/sanitize.js';
 
@@ -161,11 +161,26 @@ interface AccountCacheEntry {
   plan: string | null;
 }
 
-function accountCachePath(homeDir: string): string {
-  return path.join(getHudPluginDir(homeDir), ACCOUNT_CACHE_DIRNAME, 'account.json');
+// The cache filename is keyed on the source claude.json path (full sha256 hex, same style as the config cache in config-reader.ts). Several CLAUDE_CONFIG_DIRs can share one physical plugins dir (claude-use symlinks it across identities), where a fixed name is last-writer-wins and every identity's status line shows whichever account rendered last. Keying on the source path also keeps a set CLAUDE_CONFIG_DIR=<dir> and an unset variable on separate entries even when both resolve the same plugin dir, because they read different claude.json files.
+function accountCachePath(homeDir: string, configJsonPath: string): string {
+  const hash = createHash('sha256').update(configJsonPath).digest('hex');
+  return path.join(getHudPluginDir(homeDir), ACCOUNT_CACHE_DIRNAME, `${hash}.json`);
+}
+
+// Remove the pre-0.9.3 fixed-name cache once, if present. In a shared plugins dir it holds whichever identity wrote last, so it is dead weight at best.
+function removeLegacyAccountCache(homeDir: string): void {
+  try {
+    const legacyPath = path.join(getHudPluginDir(homeDir), ACCOUNT_CACHE_DIRNAME, ACCOUNT_LEGACY_CACHE_FILENAME);
+    if (fs.existsSync(legacyPath)) {
+      fs.unlinkSync(legacyPath);
+    }
+  } catch {
+    // Best effort: cleanup must never break the status line.
+  }
 }
 
 const ACCOUNT_CACHE_DIRNAME = 'account-cache';
+const ACCOUNT_LEGACY_CACHE_FILENAME = 'account.json';
 const ACCOUNT_CACHE_VERSION = 1;
 const ACCOUNT_CACHE_MAX_BYTES = 4096;
 
@@ -177,11 +192,11 @@ function normalizeCachedValue(value: unknown): string | null | undefined {
   return sanitizeValue(value) === value ? value : undefined;
 }
 
-function readAccountCache(homeDir: string): AccountCacheEntry | null {
+function readAccountCache(homeDir: string, configJsonPath: string): AccountCacheEntry | null {
   let fd: number | undefined;
   try {
     const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
-    fd = fs.openSync(accountCachePath(homeDir), flags);
+    fd = fs.openSync(accountCachePath(homeDir, configJsonPath), flags);
     const cacheStat = fs.fstatSync(fd);
     if (!cacheStat.isFile() || cacheStat.size <= 0 || cacheStat.size > ACCOUNT_CACHE_MAX_BYTES) {
       return null;
@@ -218,11 +233,11 @@ function readAccountCache(homeDir: string): AccountCacheEntry | null {
   }
 }
 
-function writeAccountCache(homeDir: string, entry: AccountCacheEntry): void {
+function writeAccountCache(homeDir: string, configJsonPath: string, entry: AccountCacheEntry): void {
   let tmpPath: string | undefined;
   let fd: number | undefined;
   try {
-    const cachePath = accountCachePath(homeDir);
+    const cachePath = accountCachePath(homeDir, configJsonPath);
     const cacheDir = path.dirname(cachePath);
     fs.mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
     const dirStat = fs.lstatSync(cacheDir);
@@ -263,6 +278,8 @@ export function readAccountInfo(): AccountInfo | null {
   const homeDir = os.homedir();
   const configJsonPath = getClaudeConfigJsonPath(homeDir);
 
+  removeLegacyAccountCache(homeDir);
+
   let stat: fs.Stats;
   try {
     stat = fs.statSync(configJsonPath);
@@ -270,7 +287,7 @@ export function readAccountInfo(): AccountInfo | null {
     return null;
   }
 
-  const cached = readAccountCache(homeDir);
+  const cached = readAccountCache(homeDir, configJsonPath);
   if (
     cached
     && cached.mtimeMs === stat.mtimeMs
@@ -285,7 +302,7 @@ export function readAccountInfo(): AccountInfo | null {
   try {
     const content = fs.readFileSync(configJsonPath, 'utf-8');
     const info = deriveAccountInfo(JSON.parse(content));
-    writeAccountCache(homeDir, {
+    writeAccountCache(homeDir, configJsonPath, {
       version: ACCOUNT_CACHE_VERSION,
       mtimeMs: stat.mtimeMs,
       ctimeMs: stat.ctimeMs,
