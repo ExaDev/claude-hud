@@ -164,14 +164,16 @@ test('estimateSessionCost prices Claude 5 ids carrying a context-window suffix',
 
 test('estimateSessionCost prices Claude 5 point releases like their base model', () => {
   const tokens = { inputTokens: 1000000, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 };
+  // Both sides of each comparison share one injected clock: Sonnet 5's introductory price ends on a fixed date (pinned by the test below), so a literal price here would only hold on one side of it.
+  const now = new Date();
 
-  const opus51 = estimateSessionCost({ model: { display_name: 'Opus 5.1' } }, tokens);
-  assert.ok(opus51);
-  assert.equal(opus51.inputUsd, 5);
-
-  const sonnet51 = estimateSessionCost({ model: { display_name: 'Sonnet 5.1' } }, tokens);
-  assert.ok(sonnet51);
-  assert.equal(sonnet51.inputUsd, 2);
+  for (const [pointRelease, base] of [['Opus 5.1', 'Opus 5'], ['Sonnet 5.1', 'Sonnet 5']]) {
+    const point = estimateSessionCost({ model: { display_name: pointRelease } }, tokens, { now });
+    const baseModel = estimateSessionCost({ model: { display_name: base } }, tokens, { now });
+    assert.ok(point, `${pointRelease} has a price`);
+    assert.ok(baseModel, `${base} has a price`);
+    assert.equal(point.inputUsd, baseModel.inputUsd, `${pointRelease} prices like ${base}`);
+  }
 });
 
 test('estimateSessionCost ends Sonnet 5 introductory pricing on September 1, 2026 UTC', () => {
