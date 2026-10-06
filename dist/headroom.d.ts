@@ -38,15 +38,34 @@ export declare function formatHeadroomLabel(info: HeadroomInfo): string | null;
  * Resolves the session id the proxy knows: stdin's session_id when present, else the transcript filename stem (the id the proxy derives when Claude Code does not send one).
  */
 export declare function resolveHeadroomSessionId(stdin: StdinData): string | null;
-/** Reads HEADROOM_PROXY_URL, normalized without a trailing slash. */
+/** Reads HEADROOM_PROXY_URL, normalized without a trailing slash. When set it overrides socket discovery: the operator named an http proxy, standalone of agent-shim. */
 export declare function getHeadroomProxyUrl(env?: NodeJS.ProcessEnv): string | null;
+/**
+ * Whether any headroom daemon is reachable-by-configuration: an explicit proxy URL, or a discovered agent-shim socket. Exists so callers can skip the lookup entirely (and tests can intercept the decision through the environment) without duplicating the resolution rules.
+ */
+export declare function hasHeadroomTarget(env?: NodeJS.ProcessEnv): boolean;
+/**
+ * The minimal fetch-like result the lookup needs, so the http and unix-socket transports are interchangeable behind one shape.
+ */
+interface MinimalResponse {
+    status: number;
+    ok: boolean;
+    json(): Promise<unknown>;
+}
+/**
+ * Reads the unix socket the agent-shim-supervised headroom daemon listens on, from the state file its supervisor writes (`headroom/state.v2.json`, field `socketPath`). The root is chosen the way agent-shim itself resolves it: `AGENT_SHIM_HOME` when set, else the first of `~/.agent-shim` and the pre-rename `~/.claude-use` that exists, with no fall-through past an existing root, because agent-shim uses the legacy root only in the absence of the current one. Returns null when the resolved root has no state file with a socket path, which means no supervised daemon exists to talk to and the segment stays hidden (distinct from a dead socket, which renders `down`).
+ */
+export declare function readHeadroomSocketPath(env: NodeJS.ProcessEnv, homeDir: string): string | null;
 export type HeadroomDeps = {
     homeDir: () => string;
     now: () => number;
     fetchImpl: typeof fetch;
+    /** Injectable socket transport for tests; the real one speaks `node:http` over `socketPath`. Optional so deps that only exercise the http path stay valid. */
+    socketGetImpl?: (socketPath: string, requestPath: string, timeoutMs: number) => Promise<MinimalResponse>;
 };
 /**
  * Fetches the session's savings row from the headroom proxy, with a disk cache so the statusline only pays the network round trip once per refresh interval. A failed lookup renders `down` and, while the last good numbers are within the stale grace window, keeps them in the label. Never throws. Returns null when the proxy URL or session id is unknown.
  */
 export declare function fetchHeadroomStats(stdin: StdinData, deps?: HeadroomDeps): Promise<HeadroomInfo | null>;
+export {};
 //# sourceMappingURL=headroom.d.ts.map
