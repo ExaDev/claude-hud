@@ -3,9 +3,6 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
-    tags:
-      - "v*.*.*"
     paths-ignore:
       - 'dist/**'
 
@@ -65,7 +62,7 @@ jobs:
           node-version: 22.14
           cache: npm
           registry-url: https://registry.npmjs.org
-      - npm install -g npm@^11
+      - run: npm install -g npm@^11
       - run: npm ci
       - run: npm run build
       - name: Publish to npm (trusted publishing, no token)
