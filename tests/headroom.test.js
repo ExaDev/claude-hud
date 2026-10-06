@@ -101,10 +101,11 @@ test('formatHeadroomLabel translates the label parts', () => {
 });
 
 test('resolveHeadroomSessionId prefers session_id and falls back to the transcript stem', () => {
-  assert.equal(resolveHeadroomSessionId({ session_id: 'abc-123' }), 'abc-123');
-  assert.equal(resolveHeadroomSessionId({ session_id: '  ' , transcript_path: '/tmp/sessions/def-456.jsonl' }), 'def-456');
-  assert.equal(resolveHeadroomSessionId({ transcript_path: '/tmp/no-ext-session' }), 'no-ext-session');
-  assert.equal(resolveHeadroomSessionId({}), null);
+  // An empty env pins the test off the developer's own launcher environment, which carries a real x-agent-shim-session.
+  assert.equal(resolveHeadroomSessionId({ session_id: 'abc-123' }, {}), 'abc-123');
+  assert.equal(resolveHeadroomSessionId({ session_id: '  ' , transcript_path: '/tmp/sessions/def-456.jsonl' }, {}), 'def-456');
+  assert.equal(resolveHeadroomSessionId({ transcript_path: '/tmp/no-ext-session' }, {}), 'no-ext-session');
+  assert.equal(resolveHeadroomSessionId({}, {}), null);
 });
 
 test('getHeadroomProxyUrl requires the env var and drops trailing slashes', () => {
@@ -121,6 +122,7 @@ test('fetchHeadroomStats fetches, caches, and serves the cache within the refres
   let calls = 0;
   const deps = {
     homeDir: () => dir,
+    env: { HEADROOM_PROXY_URL: 'http://127.0.0.1:8080' },
     now: () => now,
     fetchImpl: async (url) => {
       calls += 1;
@@ -133,7 +135,6 @@ test('fetchHeadroomStats fetches, caches, and serves the cache within the refres
   process.env.CLAUDE_CONFIG_DIR = dir;
 
   try {
-    process.env.HEADROOM_PROXY_URL = 'http://127.0.0.1:8080';
     const first = await fetchHeadroomStats({ session_id: 'sess-1' }, deps);
     assert.deepEqual(first, { stats: parseHeadroomStats(SAMPLE_ROW), down: false });
 
@@ -149,7 +150,6 @@ test('fetchHeadroomStats fetches, caches, and serves the cache within the refres
     assert.equal(third.down, false);
     assert.equal(calls, 2);
   } finally {
-    restoreEnvVar('HEADROOM_PROXY_URL', originalUrl);
     restoreEnvVar('CLAUDE_CONFIG_DIR', originalConfigDir);
     await rm(dir, { recursive: true, force: true });
   }
@@ -163,6 +163,7 @@ test('fetchHeadroomStats renders down, keeping recent numbers then dropping stal
   let ok = true;
   const deps = {
     homeDir: () => dir,
+    env: { HEADROOM_PROXY_URL: 'http://127.0.0.1:8080' },
     now: () => now,
     fetchImpl: async () => {
       if (!ok) {
@@ -176,7 +177,6 @@ test('fetchHeadroomStats renders down, keeping recent numbers then dropping stal
   process.env.CLAUDE_CONFIG_DIR = dir;
 
   try {
-    process.env.HEADROOM_PROXY_URL = 'http://127.0.0.1:8080';
     assert.equal((await fetchHeadroomStats({ session_id: 'sess-1' }, deps)).down, false);
 
     // The cache goes stale, the proxy is down: numbers stay for one grace interval alongside the down marker.
@@ -204,6 +204,7 @@ test('fetchHeadroomStats treats a 404 as no data yet, not as the proxy being dow
   const originalConfigDir = process.env.CLAUDE_CONFIG_DIR;
   const deps = {
     homeDir: () => dir,
+    env: {},
     now: () => 1_000_000,
     fetchImpl: async () => jsonResponse({ error: 'session_not_found' }, { ok: false, status: 404 }),
   };
@@ -220,10 +221,10 @@ test('fetchHeadroomStats treats a 404 as no data yet, not as the proxy being dow
 });
 
 test('fetchHeadroomStats returns null without a proxy URL or session id', async () => {
-  const originalUrl = process.env.HEADROOM_PROXY_URL;
   let calls = 0;
   const deps = {
     homeDir: () => '/unused',
+    env: {},
     now: () => 0,
     fetchImpl: async () => {
       calls += 1;
@@ -231,16 +232,11 @@ test('fetchHeadroomStats returns null without a proxy URL or session id', async 
     },
   };
 
-  try {
-    delete process.env.HEADROOM_PROXY_URL;
-    assert.equal(await fetchHeadroomStats({ session_id: 'sess-1' }, deps), null);
-
-    process.env.HEADROOM_PROXY_URL = 'http://127.0.0.1:8080';
-    assert.equal(await fetchHeadroomStats({}, deps), null);
-    assert.equal(calls, 0);
-  } finally {
-    restoreEnvVar('HEADROOM_PROXY_URL', originalUrl);
-  }
+  // No proxy and no socket in an empty environment: a session id alone resolves nothing.
+  assert.equal(await fetchHeadroomStats({ session_id: 'sess-1' }, deps), null);
+  // A proxy URL with no session id resolves nothing either.
+  assert.equal(await fetchHeadroomStats({}, { ...deps, env: { HEADROOM_PROXY_URL: 'http://127.0.0.1:8080' } }), null);
+  assert.equal(calls, 0);
 });
 
 test('readHeadroomSocketPath resolves the agent-shim state file across its root precedence', async () => {
@@ -280,6 +276,7 @@ test('fetchHeadroomStats speaks to the discovered socket when no proxy URL is se
   let fetchCalls = 0;
   const deps = {
     homeDir: () => dir,
+    env: { AGENT_SHIM_HOME: path.join(dir, 'shim') },
     now: () => 1_000_000,
     fetchImpl: async () => {
       fetchCalls += 1;
@@ -295,8 +292,6 @@ test('fetchHeadroomStats speaks to the discovered socket when no proxy URL is se
 
   process.env.CLAUDE_CONFIG_DIR = dir;
   try {
-    delete process.env.HEADROOM_PROXY_URL;
-    process.env.AGENT_SHIM_HOME = path.join(dir, 'shim');
     await mkdir(path.join(dir, 'shim', 'headroom'), { recursive: true });
     await writeFile(path.join(dir, 'shim', 'headroom', 'state.v2.json'), JSON.stringify({ socketPath: '/tmp/hud-test.sock' }));
 
@@ -328,6 +323,7 @@ test('HEADROOM_PROXY_URL overrides socket discovery entirely', async () => {
   let socketCalls = 0;
   const deps = {
     homeDir: () => dir,
+    env: { HEADROOM_PROXY_URL: 'http://127.0.0.1:8080', AGENT_SHIM_HOME: path.join(dir, 'shim') },
     now: () => 1_000_000,
     fetchImpl: async () => jsonResponse(SAMPLE_ROW),
     socketGetImpl: async () => {
@@ -338,8 +334,6 @@ test('HEADROOM_PROXY_URL overrides socket discovery entirely', async () => {
 
   process.env.CLAUDE_CONFIG_DIR = dir;
   try {
-    process.env.HEADROOM_PROXY_URL = 'http://127.0.0.1:8080';
-    process.env.AGENT_SHIM_HOME = path.join(dir, 'shim');
     await mkdir(path.join(dir, 'shim', 'headroom'), { recursive: true });
     await writeFile(path.join(dir, 'shim', 'headroom', 'state.v2.json'), JSON.stringify({ socketPath: '/tmp/should-not-be-used.sock' }));
 
@@ -352,4 +346,15 @@ test('HEADROOM_PROXY_URL overrides socket discovery entirely', async () => {
     restoreEnvVar('CLAUDE_CONFIG_DIR', originalConfigDir);
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('resolveHeadroomSessionId prefers the launch id from ANTHROPIC_CUSTOM_HEADERS', () => {
+  const headers = 'x-agent-shim-identity: work\nx-agent-shim-session: 11111111-2222-3333-4444-555555555555\nx-headroom-project-id: /repo';
+  assert.equal(resolveHeadroomSessionId({ session_id: 'conversation-id' }, { ANTHROPIC_CUSTOM_HEADERS: headers }), '11111111-2222-3333-4444-555555555555');
+  // Case-insensitive name, value with surrounding spaces, malformed lines skipped.
+  assert.equal(resolveHeadroomSessionId({}, { ANTHROPIC_CUSTOM_HEADERS: 'junk line\nX-Agent-Shim-Session:  spaced-id  ' }), 'spaced-id');
+  // An empty value falls through rather than answering an empty id.
+  assert.equal(resolveHeadroomSessionId({ session_id: 'conversation-id' }, { ANTHROPIC_CUSTOM_HEADERS: 'x-agent-shim-session:  ' }), 'conversation-id');
+  // No launcher environment: the existing resolution applies.
+  assert.equal(resolveHeadroomSessionId({ session_id: 'conversation-id' }, {}), 'conversation-id');
 });

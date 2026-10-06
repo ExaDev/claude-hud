@@ -2,6 +2,9 @@
 
 All notable changes to Claude HUD will be documented in this file.
 
+## [0.9.6]
+
+- The headroom segment reads the session the daemon actually attributes: an agent-shim launch carries its per-launch session id in `ANTHROPIC_CUSTOM_HEADERS`, and the door's hop records savings under that id, so it is resolved first and stdin's session id is the fallback for a standalone proxy.
 ## [0.9.5]
 
 - Distribution moves to npm: the package publishes as `claude-hud-enhanced` from the Release workflow via trusted publishing, and the marketplace entry fetches it from the npm source. `dist/` is no longer committed to the tree at all: it is built in CI and packed into the published tarball, and the Build dist workflow is gone.

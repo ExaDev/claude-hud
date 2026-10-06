@@ -111,9 +111,23 @@ export function formatHeadroomLabel(info: HeadroomInfo): string | null {
 }
 
 /**
- * Resolves the session id the proxy knows: stdin's session_id when present, else the transcript filename stem (the id the proxy derives when Claude Code does not send one).
+ * Resolves the session id the proxy knows. The agent-shim launcher injects its per-launch session id into the child's `ANTHROPIC_CUSTOM_HEADERS` (`x-agent-shim-session: <id>`), and the front door's headroom hop attributes the session's requests under exactly that id, so an environment that carries it names the row to read. Otherwise stdin's session_id, else the transcript filename stem (the id the proxy derives when Claude Code does not send one).
  */
-export function resolveHeadroomSessionId(stdin: StdinData): string | null {
+export function resolveHeadroomSessionId(stdin: StdinData, env: NodeJS.ProcessEnv = process.env): string | null {
+  const customHeaders = env.ANTHROPIC_CUSTOM_HEADERS ?? '';
+  for (const line of customHeaders.split('\n')) {
+    const separator = line.indexOf(':');
+    if (separator === -1) {
+      continue;
+    }
+    const name = line.slice(0, separator).trim().toLowerCase();
+    if (name === 'x-agent-shim-session') {
+      const value = line.slice(separator + 1).trim();
+      if (value !== '') {
+        return value;
+      }
+    }
+  }
   const sessionId = typeof stdin.session_id === 'string' ? stdin.session_id.trim() : '';
   if (sessionId) {
     return sessionId;
@@ -212,6 +226,8 @@ function toMinimalFromFetch(response: Response): MinimalResponse {
 export type HeadroomDeps = {
   homeDir: () => string;
   now: () => number;
+  /** The environment the session id and proxy URL resolve from. Optional so existing deps stay valid; defaults to the real process environment. */
+  env?: NodeJS.ProcessEnv;
   fetchImpl: typeof fetch;
   /** Injectable socket transport for tests; the real one speaks `node:http` over `socketPath`. Optional so deps that only exercise the http path stay valid. */
   socketGetImpl?: (socketPath: string, requestPath: string, timeoutMs: number) => Promise<MinimalResponse>;
@@ -307,9 +323,10 @@ export async function fetchHeadroomStats(
   deps: HeadroomDeps = defaultDeps,
 ): Promise<HeadroomInfo | null> {
   // The proxy is found one of two ways: HEADROOM_PROXY_URL names a standalone http proxy and overrides everything; otherwise the agent-shim-supervised daemon is discovered from its state file and spoken to over its unix socket.
-  const proxyUrl = getHeadroomProxyUrl();
-  const socketPath = proxyUrl === null ? readHeadroomSocketPath(process.env, deps.homeDir()) : null;
-  const sessionId = resolveHeadroomSessionId(stdin);
+  const env = deps.env ?? process.env;
+  const proxyUrl = getHeadroomProxyUrl(env);
+  const socketPath = proxyUrl === null ? readHeadroomSocketPath(env, deps.homeDir()) : null;
+  const sessionId = resolveHeadroomSessionId(stdin, env);
   if ((!proxyUrl && !socketPath) || !sessionId) {
     return null;
   }
