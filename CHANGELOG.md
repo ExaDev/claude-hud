@@ -2,6 +2,9 @@
 
 All notable changes to Claude HUD will be documented in this file.
 
+## [0.9.4]
+
+- fix(headroom): discover the agent-shim daemon's unix socket from its state file when `HEADROOM_PROXY_URL` is unset, so the savings segment renders for supervised daemons again; a dead socket shows `down` and the env var remains an override for a standalone http proxy.
 ## [Unreleased]
 
 ## [0.9.3] - 2026-10-01
