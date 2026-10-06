@@ -348,13 +348,12 @@ test('HEADROOM_PROXY_URL overrides socket discovery entirely', async () => {
   }
 });
 
-test('resolveHeadroomSessionId prefers the launch id from ANTHROPIC_CUSTOM_HEADERS', () => {
+test('resolveHeadroomSessionId prefers stdin session_id, then the launch id from ANTHROPIC_CUSTOM_HEADERS', () => {
   const headers = 'x-agent-shim-identity: work\nx-agent-shim-session: 11111111-2222-3333-4444-555555555555\nx-headroom-project-id: /repo';
-  assert.equal(resolveHeadroomSessionId({ session_id: 'conversation-id' }, { ANTHROPIC_CUSTOM_HEADERS: headers }), '11111111-2222-3333-4444-555555555555');
-  // Case-insensitive name, value with surrounding spaces, malformed lines skipped.
+  // The daemon attributes a client that names its own conversation under that id, in preference to the launch id the door sets.
+  assert.equal(resolveHeadroomSessionId({ session_id: 'conversation-id' }, { ANTHROPIC_CUSTOM_HEADERS: headers }), 'conversation-id');
+  // A client with no conversation of its own is attributed by the launch id: case-insensitive name, spaces trimmed, malformed lines skipped.
   assert.equal(resolveHeadroomSessionId({}, { ANTHROPIC_CUSTOM_HEADERS: 'junk line\nX-Agent-Shim-Session:  spaced-id  ' }), 'spaced-id');
-  // An empty value falls through rather than answering an empty id.
-  assert.equal(resolveHeadroomSessionId({ session_id: 'conversation-id' }, { ANTHROPIC_CUSTOM_HEADERS: 'x-agent-shim-session:  ' }), 'conversation-id');
-  // No launcher environment: the existing resolution applies.
-  assert.equal(resolveHeadroomSessionId({ session_id: 'conversation-id' }, {}), 'conversation-id');
+  // An empty launch id value falls through rather than answering an empty id.
+  assert.equal(resolveHeadroomSessionId({}, { ANTHROPIC_CUSTOM_HEADERS: 'x-agent-shim-session:  ' }), null);
 });

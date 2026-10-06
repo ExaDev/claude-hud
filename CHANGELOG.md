@@ -2,6 +2,10 @@
 
 All notable changes to Claude HUD will be documented in this file.
 
+## [0.9.7]
+
+- The session-id resolution now matches the daemon's own precedence: stdin's session id first (Claude Code names its own conversation, and the daemon attributes under that in preference to the id the door sets), the launch id from `ANTHROPIC_CUSTOM_HEADERS` second (the door's fallback attribution for a client that identifies no conversation), the transcript stem last.
+
 ## [0.9.6]
 
 - The headroom segment reads the session the daemon actually attributes: an agent-shim launch carries its per-launch session id in `ANTHROPIC_CUSTOM_HEADERS`, and the door's hop records savings under that id, so it is resolved first and stdin's session id is the fallback for a standalone proxy.

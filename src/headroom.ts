@@ -111,9 +111,13 @@ export function formatHeadroomLabel(info: HeadroomInfo): string | null {
 }
 
 /**
- * Resolves the session id the proxy knows. The agent-shim launcher injects its per-launch session id into the child's `ANTHROPIC_CUSTOM_HEADERS` (`x-agent-shim-session: <id>`), and the front door's headroom hop attributes the session's requests under exactly that id, so an environment that carries it names the row to read. Otherwise stdin's session_id, else the transcript filename stem (the id the proxy derives when Claude Code does not send one).
+ * Resolves the session id the proxy knows, in the order the daemon itself prefers. Claude Code sends its own session header, and the daemon attributes under that in preference to anything the door sets, so stdin's session_id names the row whenever there is one. A client that identifies no conversation of its own is attributed by the door's hop under the launch session id from `ANTHROPIC_CUSTOM_HEADERS` (`x-agent-shim-session: <id>`), which is the next thing to try. The transcript filename stem is last: the id a standalone proxy derives when no header arrived at all.
  */
 export function resolveHeadroomSessionId(stdin: StdinData, env: NodeJS.ProcessEnv = process.env): string | null {
+  const sessionId = typeof stdin.session_id === 'string' ? stdin.session_id.trim() : '';
+  if (sessionId) {
+    return sessionId;
+  }
   const customHeaders = env.ANTHROPIC_CUSTOM_HEADERS ?? '';
   for (const line of customHeaders.split('\n')) {
     const separator = line.indexOf(':');
@@ -127,10 +131,6 @@ export function resolveHeadroomSessionId(stdin: StdinData, env: NodeJS.ProcessEn
         return value;
       }
     }
-  }
-  const sessionId = typeof stdin.session_id === 'string' ? stdin.session_id.trim() : '';
-  if (sessionId) {
-    return sessionId;
   }
   const transcriptPath = typeof stdin.transcript_path === 'string' ? stdin.transcript_path.trim() : '';
   if (!transcriptPath) {
