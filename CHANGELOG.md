@@ -2,6 +2,9 @@
 
 All notable changes to Claude HUD will be documented in this file.
 
+## [0.9.5]
+
+- Distribution moves to npm: the package publishes as `claude-hud-enhanced` from the Release workflow via trusted publishing, and the marketplace entry fetches it from the npm source. `dist/` is no longer committed to the tree at all: it is built in CI and packed into the published tarball, and the Build dist workflow is gone.
 ## [0.9.4]
 
 - fix(headroom): discover the agent-shim daemon's unix socket from its state file when `HEADROOM_PROXY_URL` is unset, so the savings segment renders for supervised daemons again; a dead socket shows `down` and the env var remains an override for a standalone http proxy.

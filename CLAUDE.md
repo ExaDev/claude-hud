@@ -142,6 +142,8 @@ The setup command adds an auto-updating command that finds the latest installed 
 
 Note: `statusLine` is NOT a valid plugin.json field. It must be configured in settings.json after plugin installation. Updates are automatic - no need to re-run setup.
 
+**Distribution**: the package publishes to npm as `claude-hud-enhanced` from the Release workflow (trusted publishing, OIDC) on every `v*` tag, and the marketplace entry fetches the npm source, which lands in the standard plugin cache layout (`cache/<marketplace>/<plugin>/<version>/`), so the installed statusline command and the plugin-dir config anchoring are unchanged. `dist/` is gitignored and never committed: CI builds it and npm packs it into the tarball.
+
 **Diagnosing a segment against the code that actually runs**: the statusline command version-sorts every `${CLAUDE_CONFIG_DIR:-~/.claude}/plugins/cache/*/claude-hud/*/` copy and executes the newest, so with both this fork and the upstream installed the executing code is whichever release sorts higher, not whichever this checkout is. When a segment misbehaves, grep that cache copy's `dist/` (the per-module compiled files, e.g. `dist/headroom.js`) before concluding anything from the source tree, and check `git log --all` for unmerged fix branches before declaring a fix absent.
 
 ## Dependencies
