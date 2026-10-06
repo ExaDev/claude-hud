@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as http from 'node:http';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -127,7 +128,7 @@ export function resolveHeadroomSessionId(stdin: StdinData): string | null {
   return stem.length > 0 ? stem : null;
 }
 
-/** Reads HEADROOM_PROXY_URL, normalized without a trailing slash. */
+/** Reads HEADROOM_PROXY_URL, normalized without a trailing slash. When set it overrides socket discovery: the operator named an http proxy, standalone of agent-shim. */
 export function getHeadroomProxyUrl(env: NodeJS.ProcessEnv = process.env): string | null {
   const raw = env.HEADROOM_PROXY_URL?.trim();
   if (!raw) {
@@ -136,16 +137,91 @@ export function getHeadroomProxyUrl(env: NodeJS.ProcessEnv = process.env): strin
   return raw.replace(/\/+$/, '');
 }
 
+/**
+ * Whether any headroom daemon is reachable-by-configuration: an explicit proxy URL, or a discovered agent-shim socket. Exists so callers can skip the lookup entirely (and tests can intercept the decision through the environment) without duplicating the resolution rules.
+ */
+export function hasHeadroomTarget(env: NodeJS.ProcessEnv = process.env): boolean {
+  return getHeadroomProxyUrl(env) !== null || readHeadroomSocketPath(env, os.homedir()) !== null;
+}
+
+/**
+ * The minimal fetch-like result the lookup needs, so the http and unix-socket transports are interchangeable behind one shape.
+ */
+interface MinimalResponse {
+  status: number;
+  ok: boolean;
+  json(): Promise<unknown>;
+}
+
+/**
+ * Reads the unix socket the agent-shim-supervised headroom daemon listens on, from the state file its supervisor writes (`headroom/state.v2.json`, field `socketPath`). The root is chosen the way agent-shim itself resolves it: `AGENT_SHIM_HOME` when set, else the first of `~/.agent-shim` and the pre-rename `~/.claude-use` that exists, with no fall-through past an existing root, because agent-shim uses the legacy root only in the absence of the current one. Returns null when the resolved root has no state file with a socket path, which means no supervised daemon exists to talk to and the segment stays hidden (distinct from a dead socket, which renders `down`).
+ */
+export function readHeadroomSocketPath(env: NodeJS.ProcessEnv, homeDir: string): string | null {
+  const roots = [env.AGENT_SHIM_HOME?.trim(), path.join(homeDir, '.agent-shim'), path.join(homeDir, '.claude-use')].filter(
+    (candidate): candidate is string => typeof candidate === 'string' && candidate.length > 0,
+  );
+  const root = roots.find((candidate) => fs.existsSync(candidate));
+  if (root === undefined) {
+    return null;
+  }
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(path.join(root, 'headroom', 'state.v2.json'), 'utf-8'));
+    const socketPath = typeof parsed === 'object' && parsed !== null && 'socketPath' in parsed
+      ? (parsed as { socketPath?: unknown }).socketPath
+      : undefined;
+    return typeof socketPath === 'string' && socketPath.length > 0 ? socketPath : null;
+  } catch {
+    // An unreadable state file means no daemon to talk to, not an error worth surfacing in a statusline.
+    return null;
+  }
+}
+
+/**
+ * One `GET` over a unix socket, wrapped in the fetch-like shape the lookup already consumes. Node's global `fetch` cannot address a unix socket, so this goes through `node:http` with `socketPath`; a connect failure rejects exactly like a failed `fetch`, which the caller turns into `down`.
+ */
+function getOverSocket(socketPath: string, requestPath: string, timeoutMs: number): Promise<MinimalResponse> {
+  return new Promise((resolve, reject) => {
+    const request = http.request(
+      { socketPath, path: requestPath, method: 'GET', headers: { accept: 'application/json', host: 'localhost' }, timeout: timeoutMs },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer) => { chunks.push(chunk); });
+        response.on('end', () => { resolve(toMinimalResponse(response.statusCode ?? 0, Buffer.concat(chunks).toString('utf-8'))); });
+      },
+    );
+    request.on('timeout', () => { request.destroy(); reject(new Error('socket request timed out')); });
+    request.on('error', reject);
+    request.end();
+  });
+}
+
+/** The transport-independent core both wrappers funnel into: status plus a lazy JSON body reader. */
+function toMinimalResponse(status: number, body: string): MinimalResponse {
+  return {
+    status,
+    ok: status >= 200 && status < 300,
+    json: () => Promise.resolve(JSON.parse(body) as unknown),
+  };
+}
+
+/** Wraps a fetch `Response` (or any wider object) in the minimal shape the lookup consumes. */
+function toMinimalFromFetch(response: Response): MinimalResponse {
+  return { status: response.status, ok: response.ok, json: () => response.json() };
+}
+
 export type HeadroomDeps = {
   homeDir: () => string;
   now: () => number;
   fetchImpl: typeof fetch;
+  /** Injectable socket transport for tests; the real one speaks `node:http` over `socketPath`. Optional so deps that only exercise the http path stay valid. */
+  socketGetImpl?: (socketPath: string, requestPath: string, timeoutMs: number) => Promise<MinimalResponse>;
 };
 
 const defaultDeps: HeadroomDeps = {
   homeDir: () => os.homedir(),
   now: () => Date.now(),
   fetchImpl: fetch,
+  socketGetImpl: getOverSocket,
 };
 
 interface HeadroomCacheFile {
@@ -230,26 +306,32 @@ export async function fetchHeadroomStats(
   stdin: StdinData,
   deps: HeadroomDeps = defaultDeps,
 ): Promise<HeadroomInfo | null> {
+  // The proxy is found one of two ways: HEADROOM_PROXY_URL names a standalone http proxy and overrides everything; otherwise the agent-shim-supervised daemon is discovered from its state file and spoken to over its unix socket.
   const proxyUrl = getHeadroomProxyUrl();
+  const socketPath = proxyUrl === null ? readHeadroomSocketPath(process.env, deps.homeDir()) : null;
   const sessionId = resolveHeadroomSessionId(stdin);
-  if (!proxyUrl || !sessionId) {
+  if ((!proxyUrl && !socketPath) || !sessionId) {
     return null;
   }
 
   const now = deps.now();
-  const cachePath = headroomCachePath(proxyUrl, sessionId, deps.homeDir());
+  const cacheKey = proxyUrl ?? `unix:${socketPath}`;
+  const cachePath = headroomCachePath(cacheKey, sessionId, deps.homeDir());
   const cached = readHeadroomCache(cachePath);
 
   if (cached && now - cached.fetchedAt < HEADROOM_REFRESH_MS) {
     return { stats: cached.stats, down: false };
   }
 
-  const url = `${proxyUrl}/stats/sessions/${encodeURIComponent(sessionId)}`;
+  const requestPath = `/stats/sessions/${encodeURIComponent(sessionId)}`;
+  debug('Headroom target:', proxyUrl !== null ? `url ${proxyUrl}` : `socket ${socketPath}`);
   try {
-    const response = await deps.fetchImpl(url, {
-      signal: AbortSignal.timeout(HEADROOM_TIMEOUT_MS),
-      headers: { accept: 'application/json' },
-    });
+    const response: MinimalResponse = proxyUrl !== null
+      ? toMinimalFromFetch(await deps.fetchImpl(`${proxyUrl}${requestPath}`, {
+          signal: AbortSignal.timeout(HEADROOM_TIMEOUT_MS),
+          headers: { accept: 'application/json' },
+        }))
+      : await (deps.socketGetImpl ?? getOverSocket)(socketPath as string, requestPath, HEADROOM_TIMEOUT_MS);
     if (response.status === 404) {
       // The proxy is up and answering; this session id just has no savings row yet (nothing has been recorded for it). That is "no data", not "proxy down": render nothing rather than the down label, and don't cache, so the segment appears as soon as the first row lands.
       return null;

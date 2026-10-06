@@ -847,10 +847,47 @@ test("main reads headroom stats only when the segment is enabled and the proxy i
   assert.equal(lookupCalls, 1);
   assert.equal(renderedContext?.headroomInfo, null);
 
-  // No proxy URL: no lookup even with the flag on.
-  await run({ showHeadroom: true }, undefined);
-  assert.equal(lookupCalls, 1);
-  assert.equal(renderedContext?.headroomInfo, null);
+  // No proxy URL and no discovered socket: no lookup even with the flag on. AGENT_SHIM_HOME is pinned to a nonexistent root so a daemon on the developer's own machine cannot satisfy discovery and make this case machine-dependent (the same isolation the cache tests pin CLAUDE_CONFIG_DIR for).
+  // HOME is pinned into the temp dir as well, because with AGENT_SHIM_HOME merely absent the
+  // discovery falls through to the developer's real ~/.claude-use and the test would depend on
+  // whether this machine runs a supervised daemon.
+  const savedShimHome = process.env.AGENT_SHIM_HOME;
+  const savedHome = process.env.HOME;
+  process.env.AGENT_SHIM_HOME = path.join(tmpdir(), "hud-no-shim-home");
+  process.env.HOME = await mkdtemp(path.join(tmpdir(), "hud-no-home-"));
+  try {
+    await run({ showHeadroom: true }, undefined);
+    assert.equal(lookupCalls, 1);
+    assert.equal(renderedContext?.headroomInfo, null);
+  } finally {
+    if (savedShimHome === undefined) {
+      delete process.env.AGENT_SHIM_HOME;
+    } else {
+      process.env.AGENT_SHIM_HOME = savedShimHome;
+    }
+    process.env.HOME = savedHome;
+  }
+
+  // A discovered socket stands in for the URL: the lookup happens with no env var set.
+  const socketRoot = await mkdtemp(path.join(tmpdir(), "hud-shim-home-"));
+  await mkdir(path.join(socketRoot, "headroom"), { recursive: true });
+  await writeFile(
+    path.join(socketRoot, "headroom", "state.v2.json"),
+    JSON.stringify({ socketPath: "/tmp/hud-index-test.sock" }),
+  );
+  process.env.AGENT_SHIM_HOME = socketRoot;
+  try {
+    await run({ showHeadroom: true }, undefined);
+    assert.equal(lookupCalls, 2);
+    assert.deepEqual(renderedContext?.headroomInfo, headroomInfo);
+  } finally {
+    if (savedShimHome === undefined) {
+      delete process.env.AGENT_SHIM_HOME;
+    } else {
+      process.env.AGENT_SHIM_HOME = savedShimHome;
+    }
+    await rm(socketRoot, { recursive: true, force: true });
+  }
 });
 
 test("main builds the account label only when showAccount is on", async () => {

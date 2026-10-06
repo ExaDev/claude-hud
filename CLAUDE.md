@@ -51,6 +51,8 @@ Claude Code → stdin JSON → parse → render lines → stdout → Claude Code
 - Hooks count from `~/.claude/settings.json` (hooks)
 - Rules count from CLAUDE.md files
 
+**From the headroom daemon (opt-in, `showHeadroom`)**: per-session savings from `GET /stats/sessions/<id>`, spoken over the unix socket published in agent-shim's headroom state file (`AGENT_SHIM_HOME` or `~/.agent-shim`/`~/.claude-use`, `headroom/state.v2.json`, field `socketPath`). `HEADROOM_PROXY_URL` overrides discovery and names a standalone http proxy. A session the daemon does not know renders nothing (no data yet); an unreachable daemon renders `down`.
+
 **From Claude Code stdin rate limits**:
 - `rate_limits.five_hour.used_percentage` - 5-hour subscriber usage percentage
 - `rate_limits.five_hour.resets_at` - 5-hour reset timestamp

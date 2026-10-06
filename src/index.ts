@@ -9,7 +9,7 @@ import { parseExtraCmdArg, runExtraCmd } from "./extra-cmd.js";
 import { getClaudeCodeVersion } from "./version.js";
 import { getMemoryUsage } from "./memory.js";
 import { readAuthInfo } from "./auth.js";
-import { fetchHeadroomStats, getHeadroomProxyUrl } from "./headroom.js";
+import { fetchHeadroomStats, hasHeadroomTarget } from "./headroom.js";
 import { readAccountInfo, resolveProviderLabel, formatAccountLabel } from "./account.js";
 import { resolveEffortLevel } from "./effort.js";
 import { applyContextWindowFallback } from "./context-cache.js";
@@ -206,7 +206,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
         ? deps.readAuthInfo()
         : null;
     const headroomInfo =
-      config.display.showHeadroom && getHeadroomProxyUrl()
+      config.display.showHeadroom && hasHeadroomTarget()
         ? await deps.fetchHeadroomStats(stdin)
         : null;
     const accountProviderLabel = resolveProviderLabel();

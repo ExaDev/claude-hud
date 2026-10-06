@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -8,6 +8,7 @@ import {
   formatHeadroomLabel,
   resolveHeadroomSessionId,
   getHeadroomProxyUrl,
+  readHeadroomSocketPath,
   fetchHeadroomStats,
   HEADROOM_REFRESH_MS,
   HEADROOM_STALE_GRACE_MS,
@@ -239,5 +240,116 @@ test('fetchHeadroomStats returns null without a proxy URL or session id', async 
     assert.equal(calls, 0);
   } finally {
     restoreEnvVar('HEADROOM_PROXY_URL', originalUrl);
+  }
+});
+
+test('readHeadroomSocketPath resolves the agent-shim state file across its root precedence', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'hud-headroom-sock-'));
+  const originalHome = process.env.AGENT_SHIM_HOME;
+  try {
+    // Nothing exists: null, meaning no supervised daemon (the segment stays hidden rather than down).
+    assert.equal(readHeadroomSocketPath({}, dir), null);
+
+    // The pre-rename root carries a state file with the socket path.
+    await mkdir(path.join(dir, '.claude-use', 'headroom'), { recursive: true });
+    await writeFile(path.join(dir, '.claude-use', 'headroom', 'state.v2.json'), JSON.stringify({ socketPath: '/tmp/legacy.sock' }));
+    assert.equal(readHeadroomSocketPath({}, dir), '/tmp/legacy.sock');
+
+    // AGENT_SHIM_HOME wins over both home-rooted candidates.
+    const custom = path.join(dir, 'shim-home');
+    await mkdir(path.join(custom, 'headroom'), { recursive: true });
+    await writeFile(path.join(custom, 'headroom', 'state.v2.json'), JSON.stringify({ socketPath: '/tmp/custom.sock' }));
+    assert.equal(readHeadroomSocketPath({ AGENT_SHIM_HOME: custom }, dir), '/tmp/custom.sock');
+
+    // A state file without a socket path is not a daemon to talk to.
+    await mkdir(path.join(dir, '.agent-shim', 'headroom'), { recursive: true });
+    await writeFile(path.join(dir, '.agent-shim', 'headroom', 'state.v2.json'), JSON.stringify({ supervisorPid: 1 }));
+    assert.equal(readHeadroomSocketPath({ AGENT_SHIM_HOME: path.join(dir, 'absent') }, dir), null);
+  } finally {
+    restoreEnvVar('AGENT_SHIM_HOME', originalHome);
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('fetchHeadroomStats speaks to the discovered socket when no proxy URL is set', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'hud-headroom-sockfetch-'));
+  const originalUrl = process.env.HEADROOM_PROXY_URL;
+  const originalHome = process.env.AGENT_SHIM_HOME;
+  const originalConfigDir = process.env.CLAUDE_CONFIG_DIR;
+  let socketCalls = 0;
+  let fetchCalls = 0;
+  const deps = {
+    homeDir: () => dir,
+    now: () => 1_000_000,
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      return jsonResponse(SAMPLE_ROW);
+    },
+    socketGetImpl: async (socketPath, requestPath) => {
+      socketCalls += 1;
+      assert.equal(socketPath, '/tmp/hud-test.sock');
+      assert.equal(requestPath, '/stats/sessions/sess-1');
+      return jsonResponse(SAMPLE_ROW);
+    },
+  };
+
+  process.env.CLAUDE_CONFIG_DIR = dir;
+  try {
+    delete process.env.HEADROOM_PROXY_URL;
+    process.env.AGENT_SHIM_HOME = path.join(dir, 'shim');
+    await mkdir(path.join(dir, 'shim', 'headroom'), { recursive: true });
+    await writeFile(path.join(dir, 'shim', 'headroom', 'state.v2.json'), JSON.stringify({ socketPath: '/tmp/hud-test.sock' }));
+
+    const info = await fetchHeadroomStats({ session_id: 'sess-1' }, deps);
+    assert.deepEqual(info, { stats: parseHeadroomStats(SAMPLE_ROW), down: false });
+    assert.equal(socketCalls, 1);
+    assert.equal(fetchCalls, 0);
+
+    // A session the daemon does not know is no data, not down, and is not cached.
+    const miss = await fetchHeadroomStats({ session_id: 'sess-2' }, { ...deps, socketGetImpl: async () => jsonResponse({ error: 'session_not_found' }, { ok: false, status: 404 }) });
+    assert.equal(miss, null);
+
+    // A dead socket renders down with empty stats.
+    const dead = await fetchHeadroomStats({ session_id: 'sess-3' }, { ...deps, socketGetImpl: async () => { throw new Error('ECONNREFUSED'); } });
+    assert.deepEqual(dead, { stats: { tokensSaved: null, savingsPercent: null, savingsUsd: null }, down: true });
+  } finally {
+    restoreEnvVar('HEADROOM_PROXY_URL', originalUrl);
+    restoreEnvVar('AGENT_SHIM_HOME', originalHome);
+    restoreEnvVar('CLAUDE_CONFIG_DIR', originalConfigDir);
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('HEADROOM_PROXY_URL overrides socket discovery entirely', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'hud-headroom-override-'));
+  const originalUrl = process.env.HEADROOM_PROXY_URL;
+  const originalHome = process.env.AGENT_SHIM_HOME;
+  const originalConfigDir = process.env.CLAUDE_CONFIG_DIR;
+  let socketCalls = 0;
+  const deps = {
+    homeDir: () => dir,
+    now: () => 1_000_000,
+    fetchImpl: async () => jsonResponse(SAMPLE_ROW),
+    socketGetImpl: async () => {
+      socketCalls += 1;
+      return jsonResponse(SAMPLE_ROW);
+    },
+  };
+
+  process.env.CLAUDE_CONFIG_DIR = dir;
+  try {
+    process.env.HEADROOM_PROXY_URL = 'http://127.0.0.1:8080';
+    process.env.AGENT_SHIM_HOME = path.join(dir, 'shim');
+    await mkdir(path.join(dir, 'shim', 'headroom'), { recursive: true });
+    await writeFile(path.join(dir, 'shim', 'headroom', 'state.v2.json'), JSON.stringify({ socketPath: '/tmp/should-not-be-used.sock' }));
+
+    const info = await fetchHeadroomStats({ session_id: 'sess-1' }, deps);
+    assert.equal(info.down, false);
+    assert.equal(socketCalls, 0);
+  } finally {
+    restoreEnvVar('HEADROOM_PROXY_URL', originalUrl);
+    restoreEnvVar('AGENT_SHIM_HOME', originalHome);
+    restoreEnvVar('CLAUDE_CONFIG_DIR', originalConfigDir);
+    await rm(dir, { recursive: true, force: true });
   }
 });
